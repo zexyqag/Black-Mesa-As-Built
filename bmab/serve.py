@@ -1,4 +1,4 @@
-"""bmab's local app over HTTP: serves the front page (hub.html: the redlines and signing in, the games to copy in from Steam, the
+"""bmab's local app over HTTP: serves the front page (front.html: the redlines and signing in, the games to copy in from Steam, the
 pages), the review pages of the games here (bmab.pages, each edition's at /<edition>/) and each map's view as it is asked for, and
 routes what the pages ask to bmab.editing (changing claims with the games at hand), bmab.sources (copying games in, as bmab.jobs'
 one job), bmab.redlines (status, commit, discard, push) and bmab.github (signing in). It answers changes only from its own pages.
@@ -234,7 +234,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if p in ([], ["index.html"]) and page:
             return self._send(200, view._page("inspector.html", pages.meta(page)).encode(), "text/html; charset=utf-8")
         if p in ([], ["index.html"]) and not page:
-            return self._send(200, view._page("hub.html", None).encode(), "text/html; charset=utf-8")
+            return self._send(200, view._page("front.html", None).encode(), "text/html; charset=utf-8")
         if p == ["games"] and not page:
             return self._get(games)
         if p == ["games", "copy"] and not page:
@@ -319,10 +319,10 @@ class Server(http.server.ThreadingHTTPServer):
         super().server_bind()
 
 
-def server(port, host="127.0.0.1"):
-    """The app listening on host:port, set up but not answering yet: the redlines cloned if they can be, the pages set up. OSError
+def server(port):
+    """The app listening on port (this computer only), set up but not answering yet: the redlines cloned if they can be, the pages set up. OSError
     when the port is taken."""
-    listening = Server((host, port), Handler)
+    listening = Server(("127.0.0.1", port), Handler)
     if not redlines.git():
         print(redlines.NO_GIT, flush=True)
     elif not redlines.clone():
@@ -332,5 +332,5 @@ def server(port, host="127.0.0.1"):
     return listening
 
 
-def run(port, host="127.0.0.1"):
-    server(port, host).serve_forever()
+def run(port):
+    server(port).serve_forever()

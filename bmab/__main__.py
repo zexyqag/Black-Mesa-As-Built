@@ -541,7 +541,7 @@ def cmd_app(args):
 
 def cmd_serve(args):
     from . import serve
-    serve.run(args.port, args.host)
+    serve.run(args.port)
     return 0
 
 
@@ -786,7 +786,6 @@ def main():
     sv = sub.add_parser("serve", help="the app on this computer: the review page of each edition's games here at /<edition>/, edits to the "
                                      "redlines' files, committed only by the Commit button (bmab.serve); its pages hold the games' geometry: never publish them")
     sv.add_argument("--port", type=int, default=8650)
-    sv.add_argument("--host", default="127.0.0.1", help="the address to listen on: 0.0.0.0 to be reached from elsewhere (as in a container)")
     sv.set_defaults(fn=cmd_serve)
     hn = sub.add_parser("fake-outs", help="fake outs, where a map looks like it goes on: space joined to what the player sees that "
                                           "runs on out of sight (sight lines from the route and rides), and dark ends")
