@@ -1,6 +1,0 @@
-*
-!/bmab/
-!/pyproject.toml
-!/sources.json
-!/sources.lock.json
-**/__pycache__
