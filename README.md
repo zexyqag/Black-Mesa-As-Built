@@ -13,6 +13,9 @@ mark what you find, and send it to the redlines, the shared record everyone work
    where to get each one.
 4. Open an edition under Maps, by edition, and pick a map. Its view takes a moment to build the first time.
 
+To update bmab, unpack the new download where you unpacked the old one, replacing its files: your games, the redlines and
+your edits stay.
+
 To remove bmab, delete its folder and the bmab folders in your settings: `%APPDATA%\bmab` and `%LOCALAPPDATA%\bmab` on
 Windows, `~/.config/bmab` on Linux (your GitHub sign-in is kept there).
 
