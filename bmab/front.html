@@ -49,7 +49,14 @@ async function redlines() {
     : !s.redlines ? (s.github ? "They aren't on this computer yet: sign in with GitHub to get them." : "They aren't on this computer yet.")
     : [s.login ? `Signed in with GitHub as ${esc(s.login)}.` : "Here, sent with git's own sign-in.",
        s.changed.length || s.register.length ? `Changes not committed: ${s.changed.length} map${s.changed.length === 1 ? "" : "s"}${s.register.length ? " and the register" : ""}.` : "",
-       s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push.` : ""].filter(Boolean).join(" ");
+       s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push.` : "", clashes(s.conflicts)].filter(Boolean).join(" ");
+}
+
+function clashes(c) {  // what someone else changed that you changed too: where to decide it
+  const n = Object.values(c).reduce((a, b) => a + b, 0);
+  if (!n) return "";
+  const where = [...Object.keys(c).filter(u => u.startsWith("maps/")).map(u => esc(u.slice(5, -6))), ...(Object.keys(c).some(u => !u.startsWith("maps/")) ? ['<a href="register">the register</a>'] : [])];
+  return `<span class="warn">Someone else changed ${n === 1 ? "something" : n + " things"} you changed too: decide which to keep, on ${where.join(", ")}, before committing.</span>`;
 }
 
 function showGames(r) {

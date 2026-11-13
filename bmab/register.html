@@ -26,10 +26,12 @@
 <body>
 <div id="top"><a id="back">Front page</a> <b>Register</b> <span id="count" class="small"></span>
   <button id="workout">Work out from the games</button> <button id="commit" style="display:none">Commit</button><button id="push" style="display:none">Push</button><button id="discard" style="display:none">Throw away register changes</button></div>
+<div id="clash" style="display:none;padding:8px 16px;color:#f0a060;border-bottom:1px solid #2c2c3a"></div>
 <div id="tabs"></div>
 <div id="main"><div id="list"></div><div id="detail"></div></div>
 <datalist id="placelist"></datalist><datalist id="evidencelist"></datalist>
 <script>
+/*CONFLICTS*/
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 const base = location.pathname.replace(/\/register\/?$/, "/");
@@ -231,10 +233,12 @@ async function status() {
   $("count").textContent = [reg ? `The register has changes not committed (${s.register.join(", ")})` : "", maps ? `${maps} map${maps > 1 ? "s" : ""} changed` : "",
     s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push` : ""].filter(Boolean).join(". ") || "Everything is committed and pushed";
   $("commit").style.display = maps || reg ? "" : "none"; $("discard").style.display = reg ? "" : "none"; $("push").style.display = s.ahead ? "" : "none";
+  const mine = Object.keys(s.conflicts).some(u => !u.startsWith("maps/"));
+  showConflicts($("clash"), mine ? (await (await fetch(base + "conflicts")).json()).filter(c => !c.unit.startsWith("maps/")) : [], base, () => load(true));
 }
 $("workout").onclick = async () => { sel = null; msg = ""; work = await (await fetch(base + "register/workout")).json(); work.what ??= Object.keys(R.words.generators)[0]; render(); poll(); };
 $("commit").onclick = () => send("POST", "commit").then(status);
-$("push").onclick = () => send("POST", "push").then(status);
+$("push").onclick = () => send("POST", "push").then(() => load(true));  // what others pushed came in first, even when the push then stops
 $("discard").onclick = () => { if (confirm("Throw away every change to the register since it was last committed?")) send("POST", "register/discard").then(() => load(true)); };
 addEventListener("hashchange", () => { fromHash(); render(); });
 load();

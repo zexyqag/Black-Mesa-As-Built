@@ -113,7 +113,7 @@
     <div class="small"><input id="addplace" list="placelist" placeholder="a place" size="18"> <button id="addplacebtn">Add a place</button></div><datalist id="placelist"></datalist></div>
   <div class="page" data-kind="again"><div class="small" id="againmsg"></div><div class="rows" id="rows-again"></div>
     <div style="margin-top:6px"><button id="keep" style="display:none">Keep the ticked</button><button id="closeagain">Close</button></div></div>
-  <div id="save"><button id="again" style="display:none" title="Run the detectors over this map again and pick which of their changes to keep">Evaluate again</button><button id="commit" style="display:none">Commit</button><button id="discard" style="display:none">Discard map</button><button id="push" style="display:none">Push</button><button id="signin" style="display:none" title="Commits and pushes are then yours, made with your GitHub account">Sign in with GitHub</button><button id="signout" style="display:none">Sign out</button><div class="small" id="count"></div><div class="small" id="who"></div><div id="held" style="display:none;color:#f0a060;font-size:12px;margin-top:6px"></div></div>
+  <div id="save"><button id="again" style="display:none" title="Run the detectors over this map again and pick which of their changes to keep">Evaluate again</button><button id="commit" style="display:none">Commit</button><button id="discard" style="display:none">Discard map</button><button id="push" style="display:none">Push</button><button id="signin" style="display:none" title="Commits and pushes are then yours, made with your GitHub account">Sign in with GitHub</button><button id="signout" style="display:none">Sign out</button><div class="small" id="count"></div><div class="small" id="who"></div><div id="held" style="display:none;color:#f0a060;font-size:12px;margin-top:6px"></div><div id="clash" style="display:none;color:#f0a060;font-size:12px;margin-top:6px"></div></div>
 </div>
 <div id="detail"></div>
 <div id="cross"></div>
@@ -128,6 +128,7 @@
 <script>
 /*WEBGL*/
 /*SIGNIN*/
+/*CONFLICTS*/
 </script>
 <script>
 "use strict";
@@ -347,8 +348,12 @@ async function status() {
   const s = await (await fetch("status")).json(), n = s.changed.length, names_ = s.changed.map(c => c.map);
   changedMaps = s.changed.map(c => c.game + "/" + c.map);
   const names = n > 3 ? `${names_.slice(0, 3).join(", ")} and ${n - 3} more` : names_.join(", ");
+  const clashes = Object.values(s.conflicts).reduce((a, b) => a + b, 0), unit = cur && `maps/${keyOf(cur)}.jsonl`;
   $("count").textContent = [n ? `Changed, not committed: ${names}` : "", s.register.length ? "The register has changes not committed" : "",
-    s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push` : ""].filter(Boolean).join(". ") || "Everything is committed and pushed";
+    s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push` : "",
+    clashes ? `${clashes} change${clashes > 1 ? "s" : ""} of yours someone else changed too, to decide before committing` : ""].filter(Boolean).join(". ") || "Everything is committed and pushed";
+  if (unit && s.conflicts[unit]) showConflicts($("clash"), (await (await fetch("conflicts")).json()).filter(c => c.unit === unit), "", reloadClaims);
+  else showConflicts($("clash"), [], "", null);
   $("commit").style.display = n || s.register.length ? "" : "none";
   $("discard").style.display = cur && changedMaps.includes(keyOf(cur)) ? "" : "none";
   $("push").style.display = s.ahead && !s.pull_request ? "" : "none";
@@ -1723,9 +1728,18 @@ $("modelview").addEventListener("input", () => { if (cur) modelView(); });
 $("reset").onclick = () => { if (V) { V.resetCam(); V.draw(); } };
 const fly = () => { if (V && cur) V.setFly(!V.flying, FLY_SPEED / cur.quant); };
 $("fly").onclick = fly;
-$("commit").onclick = () => send("POST", "commit").then(status);
+$("commit").onclick = () => send("POST", "commit").then(r => r && status());  // a refusal stays said
 $("discard").onclick = () => { if (confirm(`Throw away your changes to ${[cur.name, ...(META.levels[keyOf(cur)] || []).map(x => x.map).filter(m => changedMaps.includes(cur.source + "/" + m))].join(", ")}?`)) send("POST", "discard/" + keyOf(cur)).then(lines => { if (lines) { changed(lines); status(); if (of("connector").length) syncCuts(); } }); };
-$("push").onclick = () => send("POST", "push").then(status);
+$("push").onclick = async () => {  // what others pushed comes in first, even when the push then stops (a conflict): the map as it is now, and why
+  const r = await fetch("push", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }), said = r.ok ? null : await r.text();
+  if (cur) await reloadClaims(); else await status();
+  if (said) $("count").textContent = "Could not push: " + said;
+};
+async function reloadClaims() {  // the map's claims as the files have them now
+  const data = cur, lines = await (await fetch("claims/" + keyOf(data))).json();
+  if (cur !== data) return;
+  changed(lines); await status(); if (of("connector").length) syncCuts();
+}
 $("signin").onclick = signIn;
 $("signout").onclick = () => send("POST", "logout", {}).then(status);
 $("again").onclick = evaluateAgain;

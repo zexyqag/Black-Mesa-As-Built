@@ -5,7 +5,8 @@ Settings (environment): BMAB_REDLINES, the folder (by default next to this repos
 into it when it isn't a clone yet. maps/<game>/<map>.jsonl holds a map's claims (bmab.claims); the register (bmab.register) is
 sources.jsonl, places.jsonl, facts.jsonl, events.jsonl and evidence/<source>.jsonl; rules/<name>.json holds a decided modelling rule (surface:
 the ground rule). One entry per line, sorted, so that edits to different things merge cleanly; git says who changed what and when.
-A map is named by its game (a source) and its name in that game.
+A map is named by its game (a source) and its name in that game. What others push is taken in entry by entry (sync), and where
+someone else changed an entry this computer changed too, a person decides which to keep (conflicts, decide).
 """
 import base64
 import collections
@@ -34,9 +35,22 @@ def _rows(path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()] if path.exists() else []
 
 
+def _by_id(row):
+    return row["id"]
+
+
+def _by_kind(claim):
+    return claim["kind"], claim["id"]
+
+
+def _lines(rows, order=_by_id):
+    """Entries as their file holds them: one per line, sorted, so that an edited line stays where it is."""
+    return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in sorted(rows, key=order))
+
+
 def _write(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in sorted(rows, key=lambda r: r["id"])), encoding="utf-8", newline="\n")
+    path.write_text(_lines(rows), encoding="utf-8", newline="\n")
 
 
 def table(name):
@@ -189,7 +203,7 @@ def write_map(game, name, rows):
         path.unlink(missing_ok=True)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in sorted(rows, key=lambda r: (r["kind"], r["id"]))), encoding="utf-8", newline="\n")
+    path.write_text(_lines(rows, _by_kind), encoding="utf-8", newline="\n")
 
 
 def place_table():
@@ -235,16 +249,20 @@ def git():
     return str(carried) if carried.is_file() else shutil.which("git")
 
 
-def _run(*args):
+def _run(*args, env=None, timeout=None):
     if not git():
         raise ValueError(NO_GIT)
-    return subprocess.run([git(), *args], capture_output=True, encoding="utf-8", env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    try:
+        return subprocess.run([git(), *args], capture_output=True, encoding="utf-8", timeout=timeout, env={**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env or {})})
+    except subprocess.TimeoutExpired:
+        raise ValueError(f"git didn't answer within {timeout} s") from None
 
 
-def _git(*args, author=None, token=None):
-    """git in the redlines, never asking anything. author: {name, email} to commit as; token: _signed."""
+def _git(*args, author=None, token=None, env=None, timeout=None):
+    """git in the redlines, never asking anything. author: {name, email} to commit as; token: _signed; env: more of git's
+    environment."""
     who = [a for k in ("name", "email") if author for a in ("-c", f"user.{k}={author[k]}")]
-    return _run("-C", str(REDLINES), *who, *_signed(token), *args)
+    return _run("-C", str(REDLINES), *who, *_signed(token), *args, env=env, timeout=timeout)
 
 
 def committed(path, rev="HEAD"):
@@ -340,8 +358,10 @@ def summary(game, name):
 
 
 def commit(author=None):
-    """One commit per changed map, as author ({name, email}; else as git is set up)."""
+    """One commit per changed map, as author ({name, email}; else as git is set up). Not while a conflict waits: committing would
+    decide it."""
     with lock:
+        _undecided()
         for game, name in changed():
             _git("add", f"maps/{game}/{name}.jsonl")
             done = _git("commit", "-m", f"{game}/{name}: {summary(game, name)}", author=author)
@@ -377,11 +397,16 @@ def discard(maps):
 
 
 def push(account=None):
-    """Push the commits. Signed in with GitHub (account: {token, login}) and the redlines on GitHub: with their token, or, if they
-    may not push there, to their fork's bmab-<login> branch with a pull request (pushing again updates it). Otherwise with git's own
-    credentials. A GitHub token only ever goes to GitHub."""
+    """Push the commits, once what others pushed is taken in (sync) and no conflict waits. Signed in with GitHub (account: {token,
+    login}) and the redlines on GitHub: with their token, or, if they may not push there, to their fork's bmab-<login> branch with a
+    pull request (pushing again updates it). Otherwise with git's own credentials. A GitHub token only ever goes to GitHub. The
+    number of commits taken in."""
+    taken = sync(account)
     repo = github.repository(origin()) if account else None
     with lock:
+        _undecided()
+        if not int(_git("rev-list", "--count", "@{upstream}..HEAD").stdout.strip() or 0):
+            return taken
         if repo and not (allowed := github.access(repo, account["token"]))[0]:
             fork, branch = github.fork(repo, account["token"]), f"bmab-{account['login']}"
             for _ in range(10):  # a new fork takes GitHub a moment
@@ -395,10 +420,11 @@ def push(account=None):
             _offered.clear()
             _offered[_head()] = github.pull_request(repo, f"{fork.split('/')[0]}:{branch}", allowed[1], f"Claims from bmab by {account['login']}",
                                                     f"{n} commits of claims changed in bmab.", account["token"])
-            return
+            return taken
         done = _git("push", token=account["token"] if repo else None)
     if done.returncode:
         raise ValueError(done.stderr.strip())
+    return taken
 
 
 def _head():
@@ -407,9 +433,271 @@ def _head():
 
 def status():
     """{git: whether git is here, here: whether the redlines are cloned, changed: [(game, map)], register: the register's changed
-    files, ahead: commits to push, pull_request: the one the last push opened, while it holds every commit here}."""
+    files, ahead: commits to push, pull_request: the one the last push opened, while it holds every commit here, conflicts: {unit:
+    how many of its entries wait to be decided}}."""
     if not git():
-        return {"git": False, "here": not waiting(), "changed": [], "register": [], "ahead": 0, "pull_request": None}
+        return {"git": False, "here": not waiting(), "changed": [], "register": [], "ahead": 0, "pull_request": None, "conflicts": {}}
     ahead = _git("rev-list", "--count", "@{upstream}..HEAD")
     return {"git": True, "here": not waiting(), "changed": changed(), "register": changed_register(), "ahead": int(ahead.stdout.strip() or 0) if ahead.returncode == 0 else 0,
-            "pull_request": _offered.get(_head())}
+            "pull_request": _offered.get(_head()), "conflicts": dict(collections.Counter(c["unit"] for c in conflicts()))}
+
+
+# ---------- taking in others' changes ----------
+# A unit is what is merged as one: a map's claims, a table of the register, every evidence file together (an entry moves between
+# them with its source), a rule. Its entries are {id: entry}; a rule's, {its path: its text}.
+
+TABLE_FILES = tuple(f"{t}.jsonl" for t in TABLES)
+CONFLICTS = "bmab-conflicts.json"  # in the clone's .git, so never committed: {unit: {id: {base, theirs}}}
+
+
+def _unit(path):
+    """The unit a file of the redlines (its path inside them) belongs to; None for a file bmab doesn't write (the README)."""
+    parts = path.split("/")
+    if (len(parts) == 3 and parts[0] == "maps" and path.endswith(".jsonl")) or path in TABLE_FILES or (len(parts) == 2 and parts[0] == "rules" and path.endswith(".json")):
+        return path
+    return "evidence" if len(parts) == 2 and parts[0] == "evidence" and path.endswith(".jsonl") else None
+
+
+def _rev(name):
+    """The commit name names, or None."""
+    return _git("rev-parse", "--verify", "--quiet", f"{name}^{{commit}}").stdout.strip() or None
+
+
+def _changed_between(a, b):
+    """The paths whose files differ between commits a and b."""
+    return {p for p in _git("diff", "--name-only", "-z", a, b).stdout.split("\0") if p}
+
+
+def _edited():
+    """The paths whose files here differ from the last commit (edits not committed, new files among them)."""
+    out = _git("status", "--porcelain=v1", "-z", "--untracked-files=all").stdout.split("\0")
+    return {e[3:] for e in out if len(e) > 3}
+
+
+def _unit_paths(unit, rev):
+    """The files a unit is in at commit rev."""
+    if unit == "evidence":
+        return [p for p in _git("ls-tree", "--name-only", "-z", rev, "evidence/").stdout.split("\0") if p.endswith(".jsonl")]
+    return [unit] if _git("cat-file", "-e", f"{rev}:{unit}").returncode == 0 else []
+
+
+def _at(unit, rev):
+    """A unit's entries as commit rev has them."""
+    if unit.startswith("rules/"):
+        shown = _git("show", f"{rev}:{unit}")
+        return {unit: shown.stdout} if shown.returncode == 0 else {}
+    return {e["id"]: e for path in _unit_paths(unit, rev) for e in committed(path, rev) or []}
+
+
+def _here(unit):
+    """A unit's entries as the files here have them."""
+    if unit.startswith("rules/"):
+        path = REDLINES / unit
+        return {unit: path.read_text(encoding="utf-8")} if path.exists() else {}
+    return {e["id"]: e for e in (evidence() if unit == "evidence" else _rows(REDLINES / unit))}
+
+
+def _texts(unit, entries):
+    """{path: text} of the files that hold a unit's entries, as bmab writes them (a map nobody says anything about has none)."""
+    if unit.startswith("rules/"):
+        return dict(entries)
+    if unit == "evidence":
+        by_source = collections.defaultdict(list)
+        for e in entries.values():
+            by_source[f"evidence/{e['source']}.jsonl"].append(e)
+        return {path: _lines(rows) for path, rows in by_source.items()}
+    if unit.startswith("maps/"):
+        return {unit: _lines(entries.values(), _by_kind)} if entries else {}
+    return {unit: _lines(entries.values())}
+
+
+def _put(unit, entries):
+    """Write a unit's entries into the files here; its files left without entries go."""
+    texts = _texts(unit, entries)
+    present = [f"evidence/{p.name}" for p in (REDLINES / "evidence").glob("*.jsonl")] if unit == "evidence" else [unit]
+    for path in set(present) - texts.keys():
+        (REDLINES / path).unlink(missing_ok=True)
+    for path, text in texts.items():
+        (REDLINES / path).parent.mkdir(parents=True, exist_ok=True)
+        (REDLINES / path).write_text(text, encoding="utf-8", newline="\n")
+
+
+def _take(unit, rev):
+    """A unit's files here as commit rev has them, byte for byte."""
+    paths = _unit_paths(unit, rev)
+    present = [f"evidence/{p.name}" for p in (REDLINES / "evidence").glob("*.jsonl")] if unit == "evidence" else [unit]
+    for path in set(present) - set(paths):
+        (REDLINES / path).unlink(missing_ok=True)
+    if paths:
+        _git("checkout", rev, "--", *paths)
+
+
+def _merge(base, ours, theirs):
+    """Three-way merge of a unit's entries by id: (merged {id: entry} leaving out the conflicting ids, the conflicting ids). An
+    entry added, changed or deleted on one side only is that side's; changed alike on both, either; changed differently on both, a
+    conflict."""
+    merged, clash = {}, []
+    for i in base.keys() | ours.keys() | theirs.keys():
+        b, o, t = base.get(i), ours.get(i), theirs.get(i)
+        if o == t or t == b:
+            kept = o
+        elif o == b:
+            kept = t
+        else:
+            clash.append(i)
+            continue
+        if kept is not None:
+            merged[i] = kept
+    return merged, clash
+
+
+def _scratch(name, text):
+    """A file in the clone's .git with text, written as is: git reads what is handed to it this way, as a text pipe would turn
+    every newline into the system's (Windows: CRLF)."""
+    path = REDLINES / ".git" / name
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return str(path)
+
+
+def _commit_on(parent, changes, like):
+    """A commit on parent with its units' entries as changes has them ({unit: entries}) and commit like's message and author; None
+    when that changes nothing."""
+    index = {"GIT_INDEX_FILE": str(REDLINES / ".git" / "bmab-index")}
+    _git("read-tree", parent, env=index)
+    for unit, entries in changes.items():
+        texts = _texts(unit, entries)
+        for path in set(_unit_paths(unit, parent)) - texts.keys():
+            _git("update-index", "--force-remove", "--", path, env=index)
+        for path, text in texts.items():
+            blob = _git("hash-object", "-w", "--no-filters", _scratch("bmab-blob", text)).stdout.strip()
+            _git("update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=index)
+    tree = _git("write-tree", env=index).stdout.strip()
+    if tree == _git("rev-parse", f"{parent}^{{tree}}").stdout.strip():
+        return None
+    name, email, date, message = _git("log", "-1", "--format=%an%x00%ae%x00%aI%x00%B", like).stdout.split("\0", 3)
+    who = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email}
+    made = _git("commit-tree", tree, "-p", parent, "-F", _scratch("bmab-message", message), env=who)
+    if made.returncode:
+        raise ValueError(made.stderr.strip())
+    return made.stdout.strip()
+
+
+def _keep_a_copy(head):
+    """Everything here as it is, edits included, kept as refs/bmab/before-sync: what to go back to by hand if taking in went wrong."""
+    index = {"GIT_INDEX_FILE": str(REDLINES / ".git" / "bmab-index"), "GIT_AUTHOR_NAME": "bmab", "GIT_AUTHOR_EMAIL": "bmab@localhost",
+             "GIT_COMMITTER_NAME": "bmab", "GIT_COMMITTER_EMAIL": "bmab@localhost"}
+    _git("read-tree", head, env=index)
+    _git("add", "--all", env=index)
+    tree = _git("write-tree", env=index).stdout.strip()
+    copy = _git("commit-tree", tree, "-p", head, "-m", "bmab: the redlines here before taking in others' changes", env=index).stdout.strip()
+    _git("update-ref", "refs/bmab/before-sync", copy)
+
+
+def sync(account=None):
+    """Take in what others have pushed to the redlines, keeping everything of this computer's: commits not pushed yet are made again
+    on top of theirs (same message and author), edits not committed stay edits. Entry by entry (_merge): where this computer and
+    the shared redlines changed an entry differently, the commits keep theirs and the files here keep yours, and the conflict waits
+    (conflicts) until someone decides it. With account, signed in with GitHub ({token}). The number of commits taken in."""
+    with lock:
+        if not _rev("@{upstream}"):
+            return 0
+        repo = github.repository(origin()) if account else None
+        fetched = _git("fetch", "--quiet", "origin", token=account["token"] if repo else None, timeout=120)
+        if fetched.returncode:
+            raise ValueError(f"couldn't get what others pushed: {fetched.stderr.strip()}")
+        old, up = _rev("HEAD"), _rev("@{upstream}")
+        base = _git("merge-base", old, up).stdout.strip()
+        if base == up:
+            return 0
+        _keep_a_copy(old)
+        cur, clashed = up, collections.defaultdict(set)
+        for c in _git("rev-list", "--reverse", f"{base}..{old}").stdout.split():  # this computer's commits again, on top
+            changes = {}
+            for unit in {u for u in map(_unit, _changed_between(f"{c}^", c)) if u}:
+                now = _at(unit, cur)
+                merged, clash = _merge(_at(unit, f"{c}^"), now, _at(unit, c))
+                changes[unit] = merged | {i: now[i] for i in clash if i in now}
+                clashed[unit].update(clash)
+            cur = _commit_on(cur, changes, c) or cur
+        edited = _edited()
+        work, undecided = {}, {}
+        for unit in {u for u in map(_unit, _changed_between(old, cur) | edited) if u}:  # the edits here, on top of that
+            mine, now = _here(unit), _at(unit, cur)
+            merged, clash = _merge(_at(unit, old), mine, now)
+            started = _at(unit, base) if clash or clashed[unit] else {}
+            for i in {*clash, *clashed[unit]}:
+                if mine.get(i) is not None:
+                    merged[i] = mine[i]
+                else:
+                    merged.pop(i, None)
+                if mine.get(i) != now.get(i):
+                    undecided.setdefault(unit, {})[i] = {"base": started.get(i), "theirs": now.get(i)}
+            work[unit] = merged, mine, now
+        _git("update-ref", "-m", "bmab: took in others' changes", "HEAD", cur, old)
+        _git("read-tree", cur)
+        for unit, (merged, mine, now) in work.items():
+            if merged == now:
+                _take(unit, cur)
+            elif merged != mine:
+                _put(unit, merged)
+        for path in _changed_between(old, cur) - edited:  # bmab's files are units; others (the README) as the new commit has them
+            if _unit(path) is None:
+                if _git("cat-file", "-e", f"{cur}:{path}").returncode == 0:
+                    _git("checkout", cur, "--", path)
+                else:
+                    (REDLINES / path).unlink(missing_ok=True)
+        kept = _conflicts_kept()
+        for unit, entries in undecided.items():
+            kept.setdefault(unit, {}).update(entries)
+        _keep_conflicts(kept)
+        return int(_git("rev-list", "--count", f"{old}..{up}").stdout.strip())
+
+
+def _conflicts_kept():
+    path = REDLINES / ".git" / CONFLICTS
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def _keep_conflicts(kept):
+    path = REDLINES / ".git" / CONFLICTS
+    kept = {u: e for u, e in kept.items() if e}
+    if kept:
+        path.write_text(json.dumps(kept, ensure_ascii=False), encoding="utf-8")
+    else:
+        path.unlink(missing_ok=True)
+
+
+def conflicts():
+    """The entries this computer and the shared redlines changed differently, still to decide: [{unit, id, base, theirs, yours}]
+    (None: no such entry, deleted). One the files here now have as theirs (taken, discarded, edited alike) is decided."""
+    found = []
+    for unit, entries in _conflicts_kept().items():
+        here = _here(unit)
+        found += [{"unit": unit, "id": i, **c, "yours": here.get(i)} for i, c in entries.items() if here.get(i) != c["theirs"]]
+    return found
+
+
+def decide(unit, entry_id, keep):
+    """Settle a conflict: keep yours (the files here as they are) or take theirs (the entry as the shared redlines have it)."""
+    if keep not in ("yours", "theirs"):
+        raise ValueError("keep yours or theirs")
+    with lock:
+        kept = _conflicts_kept()
+        c = kept.get(unit, {}).pop(entry_id, None)
+        if c is None:
+            raise ValueError("no such conflict")
+        if keep == "theirs":
+            entries = _here(unit)
+            if c["theirs"] is None:
+                entries.pop(entry_id, None)
+            else:
+                entries[entry_id] = c["theirs"]
+            _put(unit, entries)
+        _keep_conflicts(kept)
+
+
+def _undecided():
+    """Refuse while a conflict waits (ValueError naming where)."""
+    if left := conflicts():
+        where = sorted({"the register" if not c["unit"].startswith("maps/") else c["unit"][5:-6] for c in left})
+        raise ValueError(f"first decide what to keep where someone else changed what you changed ({len(left)}: {', '.join(where)})")

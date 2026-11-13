@@ -1,7 +1,7 @@
 """bmab's local app over HTTP: serves the front page (front.html: the redlines and signing in, the games to copy in from Steam, the
 pages), the review pages of the games here (bmab.pages, each edition's at /<edition>/) and each map's view as it is asked for, and
 routes what the pages ask to bmab.editing (changing claims with the games at hand), bmab.sources (copying games in, as bmab.jobs'
-one job), bmab.redlines (status, commit, discard, push) and bmab.github (signing in). It answers changes only from its own pages,
+one job), bmab.redlines (status, commit, discard, push, what others changed too) and bmab.github (signing in). It answers changes only from its own pages,
 and ends when the front page's Quit asks it to.
 """
 import http.server
@@ -29,7 +29,8 @@ def status():
     version of bmab running (a download's; None from the source)."""
     s, account = redlines.status(), github.account()
     return {"git": s["git"], "redlines": s["here"], "changed": [{"game": g, "map": m} for g, m in s["changed"]], "register": s["register"], "ahead": s["ahead"], "pull_request": s["pull_request"],
-            "github": bool(github.client_id()), "login": account["login"] if account else None, "version": os.environ.get("BMAB_VERSION")}
+            "github": bool(github.client_id()), "login": account["login"] if account else None, "version": os.environ.get("BMAB_VERSION"),
+            "conflicts": s["conflicts"]}
 
 
 def _signing_in(device_code):
@@ -171,6 +172,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         game, name = (p[1], p[2]) if len(p) > 2 and all(claims.MAP_NAME.fullmatch(x) for x in p[1:3]) else (None, None)
         if p == ["status"]:
             return self._reply(200, status())
+        if p == ["conflicts"]:
+            return self._reply(200, redlines.conflicts())
         if self.path.split("?")[0].strip("/") in pages.editions() and not self.path.split("?")[0].endswith("/"):  # /page: what it asks for is relative to /page/
             self.send_response(301)
             self.send_header("Location", self.path.split("?")[0] + "/")
@@ -193,7 +196,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if len(p) == 3 and p[0] == "version" and name:
             return self._get(lambda: editing.version(game, name))
         if p in (["register"], ["register", "index.html"]) and not page:
-            return self._send(200, (Path(__file__).parent / "register.html").read_bytes(), "text/html; charset=utf-8")
+            return self._send(200, view._page("register.html", None).encode(), "text/html; charset=utf-8")
         if p == ["register", "data"] and not page:
             return self._reply(200, _register_data())
         if p == ["register", "workout"] and not page:
@@ -285,8 +288,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         game, name = (p[1], p[2]) if len(p) > 2 and all(claims.MAP_NAME.fullmatch(x) for x in p[1:3]) else (None, None)
         if p == ["commit"]:
             return self._act(lambda: (redlines.commit(github.account()), status())[1])
-        if p == ["push"]:
-            return self._act(lambda: (redlines.push(github.account()), status())[1])
+        if p == ["push"]:  # what others pushed comes first, and may change which games the pages show
+            return self._act(lambda: (redlines.push(github.account()) and setup(), status())[1])
+        if p == ["conflicts", "decide"]:
+            return self._act(lambda: (lambda b: (redlines.decide(str(b.get("unit")), str(b.get("id")), b.get("keep")), status())[1])(self._body()))
         if p == ["login", "start"] and github.client_id():
             return self._act(github.start)
         if p == ["login", "poll"] and github.client_id():
@@ -337,13 +342,19 @@ class Server(http.server.ThreadingHTTPServer):
 
 
 def server(port):
-    """The app listening on port (this computer only), set up but not answering yet: the redlines cloned if they can be, the pages set up. OSError
-    when the port is taken."""
+    """The app listening on port (this computer only), set up but not answering yet: the redlines cloned if they can be (else what
+    others pushed taken in), the pages set up. OSError when the port is taken."""
     listening = Server(("127.0.0.1", port), Handler)
     if not redlines.git():
         print(redlines.NO_GIT, flush=True)
     elif not redlines.clone():
         print(f"the redlines aren't cloned into {redlines.REDLINES} yet: signing in with GitHub on the front page clones them", flush=True)
+    else:
+        try:
+            if taken := redlines.sync(github.account()):
+                print(f"took in {taken} commit{'s' if taken > 1 else ''} others pushed to the redlines", flush=True)
+        except ValueError as e:  # offline, say: the app works on what is here
+            print(f"couldn't take in what others pushed to the redlines: {e}", flush=True)
     names = setup()
     print(f"http://localhost:{port}: {', '.join(names) or 'no games here yet'} (saving to {redlines.REDLINES})", flush=True)
     return listening

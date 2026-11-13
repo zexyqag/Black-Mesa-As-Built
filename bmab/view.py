@@ -145,9 +145,9 @@ def _pack(faces, colours=None, uvs=None, layers=None):
 
 
 def _page(template, meta, **parts):
-    """A page from its template, with the scripts the pages share (webgl.js, signin.js) and its meta in it."""
+    """A page from its template, with the scripts the pages share (webgl.js, signin.js, conflicts.js) and its meta in it."""
     page = (HERE / template).read_text(encoding="utf-8")
-    for mark, script in (("/*WEBGL*/", "webgl.js"), ("/*SIGNIN*/", "signin.js")):
+    for mark, script in (("/*WEBGL*/", "webgl.js"), ("/*SIGNIN*/", "signin.js"), ("/*CONFLICTS*/", "conflicts.js")):
         page = page.replace(mark, (HERE / script).read_text(encoding="utf-8"))
     page = page.replace("/*META*/null", json.dumps(meta))
     for k, v in parts.items():
