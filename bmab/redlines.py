@@ -29,6 +29,7 @@ _offered = {}  # {commit: pull request address} of the last push that had to go 
 
 
 TABLES = ("sources", "places", "facts", "events")
+REGISTER_UNITS = {"sources": "sources.jsonl", "places": "places.jsonl", "facts": "facts.jsonl", "events": "events.jsonl", "evidence": "evidence"}  # what each table is merged as (sync)
 
 
 def _rows(path):
@@ -122,23 +123,15 @@ def table_rows(table):
 
 
 def delete_entry(table, entry_id):
-    """Take a register entry away, unless something still refers to it (a fact or an event to a place or a piece of evidence, a
-    verdict to its grounds, evidence to a source, an implied place to the places implying it)."""
+    """Take a register entry away, unless something still refers to it (bmab.register.refers)."""
+    if table not in REGISTER_UNITS:
+        raise ValueError(f"no table {table}")
     with lock:
-        reg = register()
-        users = {"places": [f["id"] for f in reg["facts"] if entry_id in (f["subject"], f.get("object"))]
-                 + [p["id"] for p in reg["places"].values() if entry_id in p.get("implied_by", [])]
-                 + [v["id"] for v in reg["events"] if v.get("place") == entry_id],
-                 "evidence": [x["id"] for x in reg["facts"] + reg["events"] if entry_id in x["evidence"]]
-                 + [s["id"] for s in reg["sources"].values() if entry_id in s.get("grounds", [])],
-                 "sources": [e["id"] for e in reg["evidence"].values() if e["source"] == entry_id],
-                 "facts": [], "events": []}.get(table)
-        if users is None:
-            raise ValueError(f"no table {table}")
+        users = [e["id"] for t in REGISTER_UNITS for e in table_rows(t) if (table, entry_id) in schema.refers(t, e)]
         if users:
             raise ValueError(f"{len(users)} entries still refer to {entry_id}, such as {users[0]}")
         if table == "evidence":
-            e = reg["evidence"].get(entry_id)
+            e = {x["id"]: x for x in evidence()}.get(entry_id)
             if e is None:
                 raise ValueError(f"no evidence {entry_id}")
             write_evidence(e["source"], [x for x in evidence(e["source"]) if x["id"] != entry_id])
@@ -438,12 +431,12 @@ def _head():
 def status():
     """{git: whether git is here, here: whether the redlines are cloned, changed: [(game, map)], register: the register's changed
     files, ahead: commits to push, pull_request: the one the last push opened, while it holds every commit here, conflicts: {unit:
-    how many of its entries wait to be decided}}."""
+    how many of its entries wait to be decided}, brought_back: how many register entries came back since someone last saw}."""
     if not git():
-        return {"git": False, "here": not waiting(), "changed": [], "register": [], "ahead": 0, "pull_request": None, "conflicts": {}}
+        return {"git": False, "here": not waiting(), "changed": [], "register": [], "ahead": 0, "pull_request": None, "conflicts": {}, "brought_back": 0}
     ahead = _git("rev-list", "--count", "@{upstream}..HEAD")
     return {"git": True, "here": not waiting(), "changed": changed(), "register": changed_register(), "ahead": int(ahead.stdout.strip() or 0) if ahead.returncode == 0 else 0,
-            "pull_request": _offered.get(_head()), "conflicts": dict(collections.Counter(c["unit"] for c in conflicts()))}
+            "pull_request": _offered.get(_head()), "conflicts": dict(collections.Counter(c["unit"] for c in conflicts())), "brought_back": len(brought_back())}
 
 
 # ---------- taking in others' changes ----------
@@ -452,6 +445,7 @@ def status():
 
 TABLE_FILES = tuple(f"{t}.jsonl" for t in TABLES)
 CONFLICTS = "bmab-conflicts.json"  # in the clone's .git, so never committed: {unit: {id: {base, theirs}}}
+BROUGHT_BACK = "bmab-brought-back.json"  # also in .git: [{unit, id, by}] put back since someone last saw them
 
 
 def _unit(path):
@@ -555,6 +549,32 @@ def _merge(base, ours, theirs):
     return merged, clash
 
 
+def _bring_back(state, earlier):
+    """Put back into state ({unit: entries} of every table of the register) what its entries name but it lacks: an entry one person
+    deleted while another made something name it, as the first of earlier() (states of the register that may still have it) has
+    it. What came back: [{unit, id, by: [[unit, id] of what names it]}]."""
+    back, older, units = [], None, {u: t for t, u in REGISTER_UNITS.items()}
+    while True:
+        wanted = collections.defaultdict(list)
+        for unit, entries in state.items():
+            for i, e in entries.items():
+                for table, j in schema.refers(units[unit], e):
+                    if j not in state[REGISTER_UNITS[table]]:
+                        wanted[REGISTER_UNITS[table], j].append([unit, i])
+        older = older or (earlier() if wanted else [])
+        found = [(unit, j, by, next((s[unit][j] for s in older if j in s[unit]), None)) for (unit, j), by in wanted.items()]
+        found = [f for f in found if f[3] is not None]
+        if not found:
+            return back
+        for unit, j, by, entry in found:  # what it names may be gone too: round again
+            state[unit][j] = entry
+            back.append({"unit": unit, "id": j, "by": by})
+
+
+def _register_at(rev):
+    return {u: _at(u, rev) for u in REGISTER_UNITS.values()}
+
+
 def _scratch(name, text):
     """A file in the clone's .git with text, written as is: git reads what is handed to it this way, as a text pipe would turn
     every newline into the system's (Windows: CRLF)."""
@@ -601,7 +621,8 @@ def sync(account=None):
     """Take in what others have pushed to the redlines, keeping everything of this computer's: commits not pushed yet are made again
     on top of theirs (same message and author), edits not committed stay edits. Entry by entry (_merge): where this computer and
     the shared redlines changed an entry differently, the commits keep theirs and the files here keep yours, and the conflict waits
-    (conflicts) until someone decides it. With account, signed in with GitHub ({token}). The number of commits taken in."""
+    (conflicts) until someone decides it. A register entry one side deleted while the other made something name it comes back
+    (_bring_back; brought_back says so). With account, signed in with GitHub ({token}). The number of commits taken in."""
     with lock:
         if not _rev("@{upstream}"):
             return 0
@@ -614,7 +635,7 @@ def sync(account=None):
         if base == up:
             return 0
         _keep_a_copy(old)
-        cur, clashed = up, collections.defaultdict(set)
+        cur, clashed, brought = up, collections.defaultdict(set), []
         for c in _git("rev-list", "--reverse", f"{base}..{old}").stdout.split():  # this computer's commits again, on top
             changes = {}
             for unit in {u for u in map(_unit, _changed_between(f"{c}^", c)) if u}:
@@ -622,6 +643,11 @@ def sync(account=None):
                 merged, clash = _merge(_at(unit, f"{c}^"), now, _at(unit, c))
                 changes[unit] = merged | {i: now[i] for i in clash if i in now}
                 clashed[unit].update(clash)
+            if changes.keys() & set(REGISTER_UNITS.values()):  # nothing it names may go missing
+                state = {u: dict(changes[u]) if u in changes else _at(u, cur) for u in REGISTER_UNITS.values()}
+                back = _bring_back(state, lambda: [_register_at(r) for r in (c, cur, f"{c}^")])
+                changes.update({b["unit"]: state[b["unit"]] for b in back})
+                brought += back
             cur = _commit_on(cur, changes, c) or cur
         edited = _edited()
         work, undecided = {}, {}
@@ -637,6 +663,13 @@ def sync(account=None):
                 if mine.get(i) != now.get(i):
                     undecided.setdefault(unit, {})[i] = {"base": started.get(i), "theirs": now.get(i)}
             work[unit] = merged, mine, now
+        if work.keys() & set(REGISTER_UNITS.values()):
+            state = {u: dict(work[u][0]) if u in work else _here(u) for u in REGISTER_UNITS.values()}
+            back = _bring_back(state, lambda: [{u: _here(u) for u in REGISTER_UNITS.values()}, _register_at(cur), _register_at(old)])
+            for b in back:
+                unit = b["unit"]
+                work[unit] = (state[unit], *(work[unit][1:] if unit in work else (_here(unit), _at(unit, cur))))
+            brought += back
         _git("update-ref", "-m", "bmab: took in others' changes", "HEAD", cur, old)
         _git("read-tree", cur)
         for unit, (merged, mine, now) in work.items():
@@ -654,6 +687,9 @@ def sync(account=None):
         for unit, entries in undecided.items():
             kept.setdefault(unit, {}).update(entries)
         _keep_conflicts(kept)
+        if brought:
+            path = REDLINES / ".git" / BROUGHT_BACK
+            path.write_text(json.dumps(brought_back() + brought, ensure_ascii=False), encoding="utf-8")
         return int(_git("rev-list", "--count", f"{old}..{up}").stdout.strip())
 
 
@@ -669,6 +705,16 @@ def _keep_conflicts(kept):
         path.write_text(json.dumps(kept, ensure_ascii=False), encoding="utf-8")
     else:
         path.unlink(missing_ok=True)
+
+
+def brought_back():
+    """Register entries taking in others' changes put back, since someone last saw them (seen_brought_back): [{unit, id, by}]."""
+    path = REDLINES / ".git" / BROUGHT_BACK
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+
+
+def seen_brought_back():
+    (REDLINES / ".git" / BROUGHT_BACK).unlink(missing_ok=True)
 
 
 def conflicts():

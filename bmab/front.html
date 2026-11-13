@@ -49,7 +49,8 @@ async function redlines() {
     : !s.redlines ? (s.github ? "They aren't on this computer yet: sign in with GitHub to get them." : "They aren't on this computer yet.")
     : [s.login ? `Signed in with GitHub as ${esc(s.login)}.` : "Here, sent with git's own sign-in.",
        s.changed.length || s.register.length ? `Changes not committed: ${s.changed.length} map${s.changed.length === 1 ? "" : "s"}${s.register.length ? " and the register" : ""}.` : "",
-       s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push.` : "", clashes(s.conflicts)].filter(Boolean).join(" ");
+       s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push.` : "", clashes(s.conflicts),
+       s.brought_back ? `<span class="warn">${s.brought_back} register entr${s.brought_back > 1 ? "ies" : "y"} someone deleted came back, as something still names ${s.brought_back > 1 ? "them" : "it"}: see <a href="register">the register</a>.</span>` : ""].filter(Boolean).join(" ");
 }
 
 function clashes(c) {  // what someone else changed that you changed too: where to decide it

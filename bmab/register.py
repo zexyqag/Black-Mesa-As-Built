@@ -158,3 +158,16 @@ def check_event(v, places, evidence):
         raise ValueError(f"no place {v['place']}")
     _ids({"evidence": v.get("evidence")}, "evidence", evidence, "an event names the evidence that says it")
     return v
+
+
+def refers(table, entry):
+    """What an entry of a table (sources, places, facts, events, evidence) names, as (table, id): the entries it needs there. A fact
+    or an event its places and evidence, a verdict its grounds, evidence its source, an implied place the places implying it."""
+    if table in ("facts", "events"):
+        named = (entry.get("subject"), entry.get("object")) if table == "facts" else (entry.get("place"),)
+        return [("places", p) for p in named if p] + [("evidence", e) for e in entry.get("evidence", [])]
+    if table == "places":
+        return [("places", p) for p in entry.get("implied_by", [])]
+    if table == "sources":
+        return [("evidence", e) for e in entry.get("grounds", [])]
+    return [("sources", entry["source"])] if table == "evidence" else []

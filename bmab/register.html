@@ -27,6 +27,7 @@
 <div id="top"><a id="back">Front page</a> <b>Register</b> <span id="count" class="small"></span>
   <button id="workout">Work out from the games</button> <button id="commit" style="display:none">Commit</button><button id="push" style="display:none">Push</button><button id="discard" style="display:none">Throw away register changes</button></div>
 <div id="clash" style="display:none;padding:8px 16px;color:#f0a060;border-bottom:1px solid #2c2c3a"></div>
+<div id="returned" style="display:none;padding:8px 16px;color:#f0a060;border-bottom:1px solid #2c2c3a"></div>
 <div id="tabs"></div>
 <div id="main"><div id="list"></div><div id="detail"></div></div>
 <datalist id="placelist"></datalist><datalist id="evidencelist"></datalist>
@@ -235,6 +236,7 @@ async function status() {
   $("commit").style.display = maps || reg ? "" : "none"; $("discard").style.display = reg ? "" : "none"; $("push").style.display = s.ahead ? "" : "none";
   const mine = Object.keys(s.conflicts).some(u => !u.startsWith("maps/"));
   showConflicts($("clash"), mine ? (await (await fetch(base + "conflicts")).json()).filter(c => !c.unit.startsWith("maps/")) : [], base, () => load(true));
+  showBroughtBack($("returned"), s.brought_back ? await (await fetch(base + "brought-back")).json() : [], base, status);
 }
 $("workout").onclick = async () => { sel = null; msg = ""; work = await (await fetch(base + "register/workout")).json(); work.what ??= Object.keys(R.words.generators)[0]; render(); poll(); };
 $("commit").onclick = () => send("POST", "commit").then(status);

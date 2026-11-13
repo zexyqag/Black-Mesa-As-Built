@@ -30,7 +30,7 @@ def status():
     s, account = redlines.status(), github.account()
     return {"git": s["git"], "redlines": s["here"], "changed": [{"game": g, "map": m} for g, m in s["changed"]], "register": s["register"], "ahead": s["ahead"], "pull_request": s["pull_request"],
             "github": bool(github.client_id()), "login": account["login"] if account else None, "version": os.environ.get("BMAB_VERSION"),
-            "conflicts": s["conflicts"]}
+            "conflicts": s["conflicts"], "brought_back": s["brought_back"]}
 
 
 def _signing_in(device_code):
@@ -174,6 +174,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._reply(200, status())
         if p == ["conflicts"]:
             return self._reply(200, redlines.conflicts())
+        if p == ["brought-back"]:
+            return self._reply(200, redlines.brought_back())
         if self.path.split("?")[0].strip("/") in pages.editions() and not self.path.split("?")[0].endswith("/"):  # /page: what it asks for is relative to /page/
             self.send_response(301)
             self.send_header("Location", self.path.split("?")[0] + "/")
@@ -290,6 +292,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._act(lambda: (redlines.commit(github.account()), status())[1])
         if p == ["push"]:  # what others pushed comes first, and may change which games the pages show
             return self._act(lambda: (redlines.push(github.account()) and setup(), status())[1])
+        if p == ["brought-back", "seen"]:
+            return self._act(lambda: (redlines.seen_brought_back(), status())[1])
         if p == ["conflicts", "decide"]:
             return self._act(lambda: (lambda b: (redlines.decide(str(b.get("unit")), str(b.get("id")), b.get("keep")), status())[1])(self._body()))
         if p == ["login", "start"] and github.client_id():

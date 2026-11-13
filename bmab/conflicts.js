@@ -1,6 +1,7 @@
-// What someone else changed that you changed too, for the app's pages: each entry as yours and as theirs (only what differs), and
-// which to keep. showConflicts(el, list, base, done): list from /conflicts (the page's own), base the app's address from this page,
-// done() once one is decided.
+// What taking in others' changes asks of you, for the app's pages. showConflicts(el, list, base, done): what someone else changed
+// that you changed too, each entry as yours and as theirs (only what differs), and which to keep; list from /conflicts (the page's
+// own), base the app's address from this page, done() once one is decided. showBroughtBack(el, list, base, done): register entries
+// that came back because something still names them; list from /brought-back, done() once seen.
 function showConflicts(el, list, base, done) {
   const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
   el.style.display = list.length ? "" : "none";
@@ -21,4 +22,18 @@ function showConflicts(el, list, base, done) {
     if (!r.ok) { alert(await r.text()); return; }
     done();
   });
+}
+
+function showBroughtBack(el, list, base, done) {
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  el.style.display = list.length ? "" : "none";
+  if (!list.length) { el.innerHTML = ""; return; }
+  const kind = u => ({ "places.jsonl": "place", "sources.jsonl": "source", "facts.jsonl": "fact", "events.jsonl": "event", evidence: "evidence" })[u] || u;
+  el.innerHTML = `<b>Someone deleted ${list.length === 1 ? "this" : "these"}, but something still names ${list.length === 1 ? "it" : "them"}, so ${list.length === 1 ? "it is" : "they are"} back.</b> To remove one for good, first take it out of what names it.` +
+    list.map(b => `<div>${esc(kind(b.unit))} ${esc(b.id)}: named by ${b.by.map(([u, i]) => esc(kind(u) + " " + i)).join(", ")}</div>`).join("") + `<button>Seen</button>`;
+  el.querySelector("button").onclick = async () => {
+    const r = await fetch(base + "brought-back/seen", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (!r.ok) { alert(await r.text()); return; }
+    done();
+  };
 }
