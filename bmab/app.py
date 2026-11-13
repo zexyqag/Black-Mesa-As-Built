@@ -1,16 +1,16 @@
 """bmab as an app on this computer (python -m bmab app): bmab.serve on its port, opened at its front page, where the first run
 happens (the redlines, the games to copy in). On Windows in a window of its own, over the WebView2 that comes with Windows
-(pywebview), which keeps what the pages keep (their settings) in this person's local AppData; closing it ends the app, asking
-first while a job runs. Links out of the app open in the browser, the app's own pages that open apart (the place tree) in a
-window of their own. Elsewhere in the browser, until stopped. The port stays the same from run to run, as the pages' settings
-belong to it."""
+(pywebview), which keeps what the pages keep (their settings) in this person's local AppData; closing it, or Quit on the front
+page, ends the app, asking first while a job runs. Links out of the app open in the browser, the app's own pages that open apart
+(the place tree) in a window of their own. Elsewhere in the browser, until Quit on the front page. The port stays the same from
+run to run, as the pages' settings belong to it."""
 import os
 import sys
 import threading
 import webbrowser
 from pathlib import Path
 
-from . import jobs, redlines, serve
+from . import jobs, serve
 
 TITLE = "Black Mesa As Built"
 # pywebview sends every link that opens apart to the browser: the app's own go to a window of their own instead
@@ -27,34 +27,30 @@ def run(port):
         return _tell(f"Port {port} is taken: bmab is running already, or another program has it. Close it, or start bmab with --port and another number.")
     url = f"http://localhost:{port}/"
     if sys.platform == "win32":
-        threading.Thread(target=listening.serve_forever, daemon=True).start()
-        _window(url)
+        _window(url, listening)
     else:
         webbrowser.open(url)
         try:
             listening.serve_forever()
         except KeyboardInterrupt:
             pass
-    _end()
+    serve.end()
 
 
-def _end():
-    """The app ends at once, and the processes it started with it (bmab.jobs.with_the_app): a job stops, as closing said it
-    would, and a view being built isn't waited for; an edit or a commit under way is (it holds bmab.redlines.lock)."""
-    redlines.lock.acquire()
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(0)
-
-
-def _window(url):
+def _window(url, listening):
     import webview
     api = _Pages(url)
     main = _open(url, api, maximized=True)
+    quitting = threading.Event()
 
-    def closing():  # False keeps the window open
+    def serving():  # until Quit on the front page, which closes the window
+        listening.serve_forever()
+        quitting.set()
+        main.destroy()
+
+    def closing():  # False keeps the window open; Quit has asked already
         busy = jobs.running()
-        return busy is None or _ask(f"bmab is still {busy}: closing it stops that. Close anyway?")
+        return quitting.is_set() or busy is None or _ask(f"bmab is still {busy}: closing it stops that. Close anyway?")
 
     def closed():  # the app's other windows go with it
         for w in list(webview.windows):
@@ -62,6 +58,7 @@ def _window(url):
                 w.destroy()
     main.events.closing += closing
     main.events.closed += closed
+    threading.Thread(target=serving, daemon=True).start()
     webview.start(private_mode=False, storage_path=str(Path(os.environ["LOCALAPPDATA"]) / "bmab" / "window"))
 
 

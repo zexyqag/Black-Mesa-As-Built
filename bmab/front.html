@@ -11,8 +11,9 @@
   td { padding: 3px 8px; border-bottom: 1px solid #191922; vertical-align: top; }
   td.state { white-space: nowrap; color: #9a9aa8; } td.state.copied { color: #7bd389; } td.state.found { color: #ffd04a; }
   .warn { color: #ff9a3c; }
+  #top { display: flex; align-items: baseline; gap: 14px; } #quit { margin-left: auto; }
 </style></head><body>
-<h1>Black Mesa As Built</h1>
+<div id="top"><h1>Black Mesa As Built</h1><span id="version" class="small"></span><button id="quit">Quit</button></div>
 
 <h3>The redlines</h3>
 <div class="small">The shared database of what people say about the facility, kept on GitHub. Your edits are saved into your copy of it; Commit and Push send them.</div>
@@ -36,10 +37,12 @@
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const get = async path => (await fetch(path)).json();
+const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 let signingIn = false, games = [];
 
 async function redlines() {
   const s = await get("status");
+  $("version").textContent = s.version ? `version ${s.version}` : "";
   $("signin").style.display = s.github && !s.login && !signingIn && s.git ? "" : "none";
   if (signingIn) return;
   $("redlines").innerHTML = !s.git ? `<span class="warn">git isn't installed on this computer, and the redlines need it: install it from <a href="https://git-scm.com/downloads" target="_blank" rel="noopener">git-scm.com</a> and start the app again.</span>`
@@ -97,9 +100,18 @@ $("signin").onclick = async () => {
 $("copy").onclick = async () => {
   const ids = [...document.querySelectorAll("#games input:checked")].map(x => x.dataset.id);
   if (!ids.length) return;
-  const r = await fetch("games/copy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+  const r = await post("games/copy", { ids });
   if (!r.ok) { $("copying").textContent = await r.text(); return; }
   gamesNow();
+};
+$("quit").onclick = async () => {  // asked first while a job runs; in the app's window, the window closes
+  let r = await post("quit", {});
+  if (r.status === 409) {
+    if (!confirm(`bmab is still ${await r.text()}: quitting stops that. Quit anyway?`)) return;
+    r = await post("quit", { anyway: true });
+  }
+  if (!r.ok) return alert(await r.text());
+  document.body.innerHTML = "<h1>Black Mesa As Built</h1><p>bmab has stopped: you can close this tab.</p>";
 };
 redlines(); gamesNow();
 </script>

@@ -1,7 +1,8 @@
 """bmab's local app over HTTP: serves the front page (front.html: the redlines and signing in, the games to copy in from Steam, the
 pages), the review pages of the games here (bmab.pages, each edition's at /<edition>/) and each map's view as it is asked for, and
 routes what the pages ask to bmab.editing (changing claims with the games at hand), bmab.sources (copying games in, as bmab.jobs'
-one job), bmab.redlines (status, commit, discard, push) and bmab.github (signing in). It answers changes only from its own pages.
+one job), bmab.redlines (status, commit, discard, push) and bmab.github (signing in). It answers changes only from its own pages,
+and ends when the front page's Quit asks it to.
 """
 import http.server
 import json
@@ -24,10 +25,11 @@ def setup():
 
 
 def status():
-    """For the page: the redlines' status (bmab.redlines.status) and who is signed in with GitHub, if signing in is on."""
+    """For the page: the redlines' status (bmab.redlines.status), who is signed in with GitHub, if signing in is on, and the
+    version of bmab running (a download's; None from the source)."""
     s, account = redlines.status(), github.account()
     return {"git": s["git"], "redlines": s["here"], "changed": [{"game": g, "map": m} for g, m in s["changed"]], "register": s["register"], "ahead": s["ahead"], "pull_request": s["pull_request"],
-            "github": bool(github.client_id()), "login": account["login"] if account else None}
+            "github": bool(github.client_id()), "login": account["login"] if account else None, "version": os.environ.get("BMAB_VERSION")}
 
 
 def _signing_in(device_code):
@@ -274,6 +276,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         _page, p = self._route()
+        if p == ["quit"] and not _page:
+            return self._quit()
         if not self._changing(p):
             return
         game, name = (p[1], p[2]) if len(p) > 2 and all(claims.MAP_NAME.fullmatch(x) for x in p[1:3]) else (None, None)
@@ -309,6 +313,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._act(lambda: editing.find_openings(game, name, p[3]))
         self._reply(404, "no such thing")
 
+    def _quit(self):
+        """The front page's Quit: the app stops answering (serving it ends: bmab.app then ends), asking the page first while a job
+        runs (409, what the job is doing), as closing the app's window does."""
+        if not self._ours():
+            return self._reply(403, "not from this app's pages")
+        anyway = self._body().get("anyway")  # read before the reply: what is left unread when the process ends resets the connection
+        if (busy := jobs.running()) and not anyway:
+            return self._reply(409, busy)
+        self._reply(200, {})
+        self.server.shutdown()
+
 
 class Server(http.server.ThreadingHTTPServer):
     allow_reuse_address = sys.platform != "win32"  # on Windows that lets a second program listen on the same port
@@ -334,3 +349,13 @@ def server(port):
 
 def run(port):
     server(port).serve_forever()
+    end()
+
+
+def end():
+    """bmab ends at once, and the processes it started with it (bmab.jobs.with_the_app): a job stops, as quitting said it would,
+    and a view being built isn't waited for; an edit or a commit under way is (it holds bmab.redlines.lock)."""
+    redlines.lock.acquire()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
