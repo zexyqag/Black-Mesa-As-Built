@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Black Mesa As Built</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { background: #0e0e14; color: #ddd; font: 15px/1.6 system-ui, sans-serif; margin: 30px 40px; max-width: 980px; }
+  a { color: #8cc8ff; } .small { color: #9a9aa8; font-size: 13px; }
+  h3 { margin: 26px 0 6px; }
+  button { background: #1f1f2b; color: #ddd; border: 1px solid #3a3a4c; border-radius: 3px; padding: 3px 11px; cursor: pointer; font: inherit; font-size: 14px; }
+  button:hover { background: #2a2a3a; } button:disabled { opacity: 0.5; cursor: default; }
+  table { border-collapse: collapse; margin: 6px 0 10px; width: 100%; }
+  td { padding: 3px 8px; border-bottom: 1px solid #191922; vertical-align: top; }
+  td.state { white-space: nowrap; color: #9a9aa8; } td.state.copied { color: #7bd389; } td.state.found { color: #ffd04a; }
+  .warn { color: #ff9a3c; }
+</style></head><body>
+<h1>Black Mesa As Built</h1>
+
+<h3>The redlines</h3>
+<div class="small">The shared database of what people say about the facility, kept on GitHub. Your edits are saved into your copy of it; Commit and Push send them.</div>
+<div id="redlines">...</div>
+<button id="signin" style="display:none">Sign in with GitHub</button>
+
+<h3>Your games</h3>
+<div class="small">bmab reads its own copy of the games it uses, taken from your Steam libraries or from what you put into its downloads folder. Nothing of them leaves this computer. A mod comes with the game it builds on.</div>
+<div id="steam"></div>
+<table id="games"></table>
+<button id="copy">Copy the ticked games</button> <span id="copying" class="small"></span>
+
+<h3>Maps, by edition</h3>
+<ul id="pages"><li class="small">...</li></ul>
+
+<h3>The register</h3>
+<ul><li><a href="register">Places, facts, events, evidence and sources: browse and edit</a></li><li><a href="placetree">Every place of the facility, as a tree</a></li></ul>
+
+<script>
+/*SIGNIN*/
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const get = async path => (await fetch(path)).json();
+let signingIn = false, games = [];
+
+async function redlines() {
+  const s = await get("status");
+  $("signin").style.display = s.github && !s.login && !signingIn && s.git ? "" : "none";
+  if (signingIn) return;
+  $("redlines").innerHTML = !s.git ? `<span class="warn">git isn't installed on this computer, and the redlines need it: install it from <a href="https://git-scm.com/downloads" target="_blank" rel="noopener">git-scm.com</a> and start the app again.</span>`
+    : !s.redlines ? (s.github ? "They aren't on this computer yet: sign in with GitHub to get them." : "They aren't on this computer yet.")
+    : [s.login ? `Signed in with GitHub as ${esc(s.login)}.` : "Here, sent with git's own sign-in.",
+       s.changed.length || s.register.length ? `Changes not committed: ${s.changed.length} map${s.changed.length === 1 ? "" : "s"}${s.register.length ? " and the register" : ""}.` : "",
+       s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push.` : ""].filter(Boolean).join(" ");
+}
+
+function showGames(r) {
+  $("steam").innerHTML = r.steam.length ? `<span class="small">Steam found: ${r.steam.map(esc).join(", ")}</span>`
+    : `<span class="warn">Steam wasn't found on this computer. Install it and the games, then reload this page.</span>`;
+  const ticked = new Set([...document.querySelectorAll("#games input:checked")].map(x => x.dataset.id));
+  games = r.games;
+  $("games").innerHTML = games.map(g => `<tr><td><input type="checkbox" data-id="${esc(g.id)}"${g.state === "missing" ? " disabled" : ""}${(r.job.state === "none" ? g.suggested : ticked.has(g.id)) ? " checked" : ""}></td>` +
+    `<td>${esc(g.title)}${g.title !== g.id ? ` <span class="small">${esc(g.id)}</span>` : ""}</td>` +
+    `<td class="state ${g.state}">${{ copied: "copied", found: "ready to copy", missing: "not found" }[g.state]}</td><td class="small">${g.state === "missing" ? esc(g.detail) : g.state === "found" ? "from " + esc(g.detail) : esc(g.detail)}</td></tr>`).join("");
+  showJob(r.job);
+}
+
+function showJob(j) {
+  const title = id => (games.find(g => g.id === id) || { title: id }).title;
+  $("copy").disabled = j.state === "running" || !!j.busy;
+  $("copying").innerHTML = j.state === "running" ? (j.progress ? `Copying ${esc(title(j.progress.source))}: ${j.progress.done.toLocaleString()} of ${j.progress.files.toLocaleString()} files (${j.seconds} s so far)` : `Starting (${j.seconds} s)`)
+    : j.state === "failed" ? `<span class="warn">Copying stopped: ${esc(j.why)}</span>`
+    : j.state === "done" ? j.results.map(x => `${esc(title(x.id))}: ${x.status === "imported" || x.status === "pinned" ? "copied" : `<span class="warn">${esc(x.status)}, ${esc(x.detail)}</span>`}`).join("; ")
+    : j.busy ? `The app is busy ${esc(j.busy)}: copying can start once that is done.` : "";
+}
+
+async function gamesNow() {  // the list, then how copying goes until it ends, then the list and the pages as they are after it
+  const r = await get("games");
+  showGames(r);
+  if (r.job.state === "running") {
+    let j;
+    do { await new Promise(r_ => setTimeout(r_, 1000)); j = await get("games/copy"); showJob(j); } while (j.state === "running");
+    showGames(await get("games"));
+  }
+  pagesNow();
+}
+
+async function pagesNow() {
+  const list = await get("pages");
+  $("pages").innerHTML = list.length ? list.map(p => `<li><a href="${esc(p.edition)}/">${esc(p.edition)}</a> <span class="small">${p.maps} maps, from: ${p.games.map(esc).join(", ")}</span></li>`).join("")
+    : `<li class="small">No maps yet: get the redlines (they say which games count) and copy your games.</li>`;
+}
+
+$("signin").onclick = async () => {
+  signingIn = true; $("signin").style.display = "none";
+  const said = await gitHubSignIn(html => { $("redlines").innerHTML = html; });
+  signingIn = false;
+  await redlines();
+  if (said !== "done") $("redlines").textContent = said;
+  gamesNow();
+};
+$("copy").onclick = async () => {
+  const ids = [...document.querySelectorAll("#games input:checked")].map(x => x.dataset.id);
+  if (!ids.length) return;
+  const r = await fetch("games/copy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+  if (!r.ok) { $("copying").textContent = await r.text(); return; }
+  gamesNow();
+};
+redlines(); gamesNow();
+</script>
+</body></html>

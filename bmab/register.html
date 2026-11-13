@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Register</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { background: #0e0e14; color: #ddd; font: 14px/1.5 system-ui, sans-serif; margin: 0; }
+  a { color: #8cc8ff; } .small { color: #9a9aa8; font-size: 12px; }
+  #top { padding: 10px 16px; border-bottom: 1px solid #2c2c3a; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #tabs { padding: 8px 16px 0; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .tab { padding: 3px 10px; border-radius: 4px; cursor: pointer; color: #bbb; } .tab.on { background: #2a2a3a; color: #fff; }
+  .tab .n { color: #777; font-size: 11px; margin-left: 4px; }
+  #main { display: flex; height: calc(100vh - 92px); }
+  #list { width: 46%; overflow: auto; border-right: 1px solid #2c2c3a; }
+  #list, #detail { scrollbar-color: #3a3a4c #15151c; }
+  #detail { flex: 1; overflow: auto; padding: 12px 16px; }
+  .row { padding: 3px 16px; cursor: pointer; border-bottom: 1px solid #191922; } .row:hover { background: #1b1b26; } .row.sel { background: #2a2a3a; }
+  button { background: #1f1f2b; color: #ddd; border: 1px solid #3a3a4c; border-radius: 3px; padding: 2px 9px; cursor: pointer; font: inherit; font-size: 13px; }
+  input, select, textarea { background: #1b1b24; color: #ddd; border: 1px solid #333; padding: 3px 6px; font: inherit; font-size: 13px; }
+  textarea { width: 100%; height: 60px; } label { display: block; margin: 6px 0 2px; color: #9a9aa8; font-size: 12px; }
+  .field input:not([type=checkbox]), .field select { width: 100%; box-sizing: border-box; }
+  .chip { display: inline-block; background: #263040; border-radius: 4px; padding: 0 6px; margin: 2px 4px 2px 0; font-size: 12px; }
+  .chip b { cursor: pointer; color: #f99; margin-left: 4px; }
+  .change { padding: 4px 0; border-bottom: 1px solid #191922; } .change .was { color: #c88; } .change .now { color: #8c8; }
+  .go { cursor: pointer; color: #8cc8ff; } .msg { color: #f0a060; margin: 8px 0; }
+  #preview img { max-width: 100%; image-rendering: pixelated; background: #333; } blockquote { margin: 6px 0; padding: 6px 10px; background: #171720; border-left: 3px solid #445; }
+</style></head>
+<body>
+<div id="top"><a id="back">Front page</a> <b>Register</b> <span id="count" class="small"></span>
+  <button id="workout">Work out from the games</button> <button id="commit" style="display:none">Commit</button><button id="push" style="display:none">Push</button><button id="discard" style="display:none">Throw away register changes</button></div>
+<div id="tabs"></div>
+<div id="main"><div id="list"></div><div id="detail"></div></div>
+<datalist id="placelist"></datalist><datalist id="evidencelist"></datalist>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const base = location.pathname.replace(/\/register\/?$/, "/");
+const TABS = [["places", "Places"], ["facts", "Facts"], ["events", "Events"], ["evidence", "Evidence"], ["sources", "Sources"]];
+const words = p => String(p).replace(/-/g, " ");
+const many = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+let R = null, tab = "places", sel = null, find = "", msg = "", work = null;  // work: what working out from the games said last
+$("back").href = base;
+
+async function send(method, path, body) {
+  const r = await fetch(base + path, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!r.ok) { msg = await r.text(); detail(); return null; }
+  msg = ""; return r.json();
+}
+async function load(keep) {
+  R = await (await fetch(base + "register/data")).json();
+  R.events.sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+  R.sources.sort((a, b) => a.title.localeCompare(b.title));
+  R.by = {}; for (const [t] of TABS) R.by[t] = new Map(R[t].map(x => [x.id, x]));
+  R.citing = new Map(); R.naming = new Map();  // {evidence: [[table, entry]]}, {place: [[table, entry]]}
+  const add = (m, k, v) => (m.get(k) || m.set(k, []).get(k)).push(v);
+  for (const f of R.facts) { for (const e of f.evidence) add(R.citing, e, ["facts", f]); for (const p of [f.subject, f.object]) if (p) add(R.naming, p, ["facts", f]); }
+  for (const v of R.events) { for (const e of v.evidence) add(R.citing, e, ["events", v]); if (v.place) add(R.naming, v.place, ["events", v]); }
+  for (const s of R.sources) for (const e of s.grounds || []) add(R.citing, e, ["sources", s]);
+  $("placelist").innerHTML = R.places.map(p => `<option value="${esc(p.id)}">`).join("");
+  $("evidencelist").innerHTML = R.evidence.map(e => `<option value="${esc(e.id)}">`).join("");
+  if (!keep) fromHash();
+  render(); status();
+}
+function fromHash() {
+  const [t, ...rest] = decodeURIComponent(location.hash.slice(1)).split("/");
+  if (TABS.some(x => x[0] === t)) { tab = t; sel = rest.join("/") || null; }
+}
+function go(t, id) { tab = t; sel = id; msg = ""; work = null; location.hash = t + "/" + id; render(); }
+const factText = f => `${words(f.subject)} ${f.relation}` + (f.object ? " " + words(f.object) : f.value !== undefined ? ` ${f.value} ${R.words.valued[f.relation]}` : "");
+const eventText = v => `${v.date}${v.time ? " " + v.time : ""}: ${words(v.id)}${v.place ? ", " + words(v.place) : ""}`;
+const TEXT = { facts: factText, events: eventText, sources: s => `verdict on ${s.title}` };
+const citedBy = id => (R.citing.get(id) || []).map(([t, x]) => TEXT[t](x));
+const LABEL = {
+  places: p => `${esc(words(p.id))} <span class="small">${esc(p.type)}${p.implied_by ? ", implied" : ""}, ${many((R.naming.get(p.id) || []).length, "mention")}</span>`,
+  facts: f => `${esc(factText(f))} <span class="small">${many(f.evidence.length, "piece")} of evidence</span>`,
+  events: v => `${esc(eventText(v))} <span class="small">${many(v.evidence.length, "piece")} of evidence</span>`,
+  evidence: e => `${esc(e.source)} ${esc(e.kind)}: ${esc(e.url ? e.id.slice(e.source.length + 1) : e.ref || e.file)} <span class="small">tier ${e.tier}${e.how === "search summary" ? ", search summary" : ""}${e.url && citedBy(e.id).length ? ", " + esc(citedBy(e.id)[0]) : ""}</span>`,
+  sources: s => `${esc(s.title)} <span class="small">${esc(s.kind)}${s.edition ? ", " + esc(s.edition) : ""}, tier ${s.tier}${s.verdict ? ", " + esc(s.verdict) + (s.rank ? " " + s.rank : "") : ""}${s.reason ? ": " + esc(s.reason) : ""}</span>`,
+};
+function render() {
+  $("tabs").innerHTML = TABS.map(([t, n]) => `<span class="tab${t === tab ? " on" : ""}" data-t="${t}">${n}<span class="n">${R[t].length}</span></span>`).join("")
+    + ` <input id="find" placeholder="Find" value="${esc(find)}" style="margin-left:12px;width:220px"> <button id="new">New</button>`;
+  document.querySelectorAll(".tab").forEach(el => el.onclick = () => { tab = el.dataset.t; sel = null; msg = ""; work = null; location.hash = tab; render(); });
+  $("find").oninput = e => { find = e.target.value; list(); }; $("new").onclick = () => { sel = "new"; msg = ""; work = null; render(); };
+  list(); detail();
+}
+function list() {
+  const q = find.trim().toLowerCase(), rows = R[tab].filter(x => !q || (JSON.stringify(x) + LABEL[tab](x)).toLowerCase().includes(q));
+  $("list").innerHTML = rows.map(x => `<div class="row${x.id === sel ? " sel" : ""}" data-id="${esc(x.id)}">${LABEL[tab](x)}</div>`).join("") || `<div class="row small">none</div>`;
+  $("list").querySelectorAll(".row[data-id]").forEach(el => el.onclick = () => go(tab, el.dataset.id));
+  const picked = $("list").querySelector(".row.sel");
+  if (picked) picked.scrollIntoView({ block: "nearest" });
+}
+const field = (name, title, html) => `<div class="field"><label>${title}</label>${html}</div>`;
+const input = (name, value, attrs = "") => `<input data-f="${name}" value="${esc(value ?? "")}" ${attrs}>`;
+const select = (name, value, options, blank) => `<select data-f="${name}">${blank ? `<option value=""${!value ? " selected" : ""}>${blank}</option>` : ""}${options.map(o => `<option${o === value ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+const linkTo = (t, id, text) => `<span class="go" data-go="${t}|${esc(id)}">${esc(text ?? id)}</span>`;
+const links = xs => xs.length ? xs.map(([t, x]) => `<div>${linkTo(t, x.id, TEXT[t](x))}</div>`).join("") : `<span class="small">none</span>`;
+const chips = (key, title, ids) => `<label>${title}</label><div class="chips" data-k="${key}">${(ids || []).map(e => `<span class="chip" data-e="${esc(e)}">${linkTo("evidence", e)}<b title="Take it away">x</b></span>`).join("")}</div>`
+  + `<input class="addev" data-k="${key}" list="evidencelist" placeholder="add evidence (id)" style="width:70%"> <button class="addevb" data-k="${key}">Add</button>`;
+function detail(draft) {  // draft: the entry as typed so far, when the form is drawn again before saving
+  if (work) return working();
+  const x = draft || (sel === "new" ? {} : R.by[tab].get(sel)), isNew = sel === "new";
+  if (!x) { $("detail").innerHTML = `<div class="small">Pick an entry, or make a new one.</div>` + (msg ? `<div class="msg">${esc(msg)}</div>` : ""); return; }
+  let h = msg ? `<div class="msg">${esc(msg)}</div>` : "";
+  if (tab === "places") {
+    h += field("id", "Name (small letters and digits joined by hyphens)", input("id", x.id, isNew ? "" : "readonly"))
+      + field("type", "Type", select("type", x.type, R.words.place_types))
+      + field("implied_by", "Implied by (places, comma separated: for a place nothing names, a series' missing member)", input("implied_by", (x.implied_by || []).join(", ")))
+      + (isNew ? "" : `<label>Facts and events naming it</label>${links(R.naming.get(x.id) || [])}`);
+  } else if (tab === "facts") {
+    const rel = x.relation || R.words.relations[0], valued = rel in R.words.valued, alone = R.words.alone.includes(rel);
+    h += field("subject", "Place", input("subject", x.subject, 'list="placelist"')) + field("relation", "Relation", select("relation", rel, R.words.relations))
+      + (alone ? "" : valued ? field("value", `Value (${R.words.valued[rel]})`, input("value", x.value, 'type="number" step="any"')) : field("object", "Other place", input("object", x.object, 'list="placelist"')))
+      + chips("evidence", "Evidence that says it", x.evidence);
+    if (!isNew) h += `<div class="small" style="margin-top:8px">${linkTo("places", x.subject, "the place")}${x.object ? " and " + linkTo("places", x.object, "the other place") : ""}</div>`;
+  } else if (tab === "events") {
+    h += field("id", "Name (small letters and digits joined by hyphens)", input("id", x.id, isNew ? "" : "readonly"))
+      + field("date", "Date (MM-DD: no source gives the year)", input("date", x.date, 'placeholder="05-16"')) + field("time", "Time (if known)", input("time", x.time, 'type="time"'))
+      + field("place", "Place (if known)", input("place", x.place, 'list="placelist"')) + chips("evidence", "Evidence that says it", x.evidence);
+    if (!isNew && x.place) h += `<div class="small" style="margin-top:8px">${linkTo("places", x.place, "the place")}</div>`;
+  } else if (tab === "evidence") {
+    const web = x._web ?? "url" in x, pictured = ["sign", "wall map"].includes(x.kind);
+    h += field("id", "Id", input("id", x.id, isNew ? "" : "readonly")) + field("source", "Source", select("source", x.source, R.sources.map(s => s.id)))
+      + field("where", "Where it is", `<select id="where"><option value="files"${web ? "" : " selected"}>in the source's files</option><option value="web"${web ? " selected" : ""}>on the web</option></select>`)
+      + field("kind", "Kind", select("kind", x.kind, web ? R.words.page_kinds : R.words.evidence_kinds));
+    h += web ? field("url", "Address", input("url", x.url, 'placeholder="https://"')) + field("read", "Read on", input("read", x.read, 'type="date"'))
+      + field("how", "How it was read", select("how", x.how, R.words.how))
+      : field("file", "File (its path in the source)", input("file", x.file))
+      + field("sha256", "sha256 of that file", input("sha256", x.sha256)) + field("ref", "Where in the file (a texture's name, a line's id, a page, a timecode)", input("ref", x.ref));
+    h += field("tier", "Tier (1 to 5)", input("tier", x.tier, 'type="number" min="1" max="5"'));
+    if (!web) h += field("seen_in", "Seen in (maps, comma separated)", input("seen_in", (x.seen_in || []).join(", ")))
+      + field("heard_in", "Heard in (maps, comma separated)", input("heard_in", (x.heard_in || []).join(", ")))
+      + (pictured ? field("transcription", "What it says (only for text in a picture)", `<textarea data-f="transcription">${esc(x.transcription ?? "")}</textarea>`) : "");
+    if (!isNew) h += `<label>Cited by</label>${links(R.citing.get(x.id) || [])}` + (web ? `<label>The page</label><div><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.url)}</a></div>`
+      : `<label>From your own files</label><div id="preview" class="small">loading...</div>`);
+  } else {
+    const verdict = x.verdict;
+    h += field("id", "Id", input("id", x.id, isNew ? "" : "readonly")) + field("title", "Title", input("title", x.title))
+      + field("kind", "Kind", select("kind", x.kind, R.words.source_kinds)) + field("edition", "Edition (games only)", select("edition", x.edition, R.words.editions, "none"))
+      + field("tier", "Tier (1 to 5)", input("tier", x.tier, 'type="number" min="1" max="5"')) + field("verdict", "Verdict (mods)", select("verdict", verdict, R.words.verdicts, "none"))
+      + (R.words.ranked.includes(verdict) ? field("rank", `Rank among the ${verdict === "reserve" ? "reserve" : "admitted"} (1 first)`, input("rank", x.rank, 'type="number" min="1"')) : "")
+      + (verdict === "rejected" ? field("reason", "Why", select("reason", x.reason, R.words.reasons, "not given")) : "")
+      + (verdict ? chips("grounds", "What the verdict rests on", x.grounds) : "");
+    if (!isNew) { const n = R.evidence.filter(e => e.source === x.id).length; h += `<label>Its evidence</label><div class="small">${many(n, "piece")}</div>`; }
+  }
+  h += `<p><button id="save">${isNew ? "Add" : "Save"}</button>${isNew ? "" : ` <button id="del">Delete</button>`}</p>`;
+  $("detail").innerHTML = h;
+  $("detail").querySelectorAll("[data-go]").forEach(el => el.onclick = () => { const [t, id] = el.dataset.go.split("|"); go(t, id); });
+  if (tab === "facts") $("detail").querySelector('[data-f="relation"]').onchange = e => { const keep = read(); keep.relation = e.target.value; delete keep.object; delete keep.value; detail(keep); };
+  if (tab === "sources") $("detail").querySelector('[data-f="verdict"]').onchange = () => detail(read());
+  if ($("where")) $("where").onchange = () => { const keep = read(); delete keep.kind; detail(keep); };
+  $("detail").querySelectorAll(".chips .chip b").forEach(b => b.onclick = () => { const keep = read(), k = b.closest(".chips").dataset.k; keep[k] = keep[k].filter(e => e !== b.parentNode.dataset.e); detail(keep); });
+  $("detail").querySelectorAll(".addevb").forEach(btn => btn.onclick = () => {
+    const k = btn.dataset.k, v = $("detail").querySelector(`.addev[data-k="${k}"]`).value.trim(); if (!v) return;
+    const keep = read(); keep[k] = keep[k] || []; if (!keep[k].includes(v)) keep[k].push(v); detail(keep);
+  });
+  $("save").onclick = save;
+  if (!isNew) $("del").onclick = async () => { if (confirm(`Delete ${sel}?`) && await send("POST", "register/delete", { table: tab, id: sel })) { sel = null; await load(true); } };
+  if ($("preview")) preview(x);
+}
+function read() {  // the form as an entry; an evidence form also says whether it is a web page (_web), which save() leaves out
+  const x = sel === "new" ? {} : { ...(R.by[tab].get(sel) || {}) };
+  if ($("where")) {
+    x._web = $("where").value === "web";
+    for (const k of x._web ? ["file", "sha256", "ref", "seen_in", "heard_in", "transcription"] : ["url", "read", "how"]) delete x[k];
+  }
+  if (tab === "sources") for (const k of ["rank", "reason", "grounds"]) delete x[k];  // only what the form shows for this verdict
+  $("detail").querySelectorAll("[data-f]").forEach(el => {
+    const k = el.dataset.f, v = el.value.trim();
+    if (["implied_by", "seen_in", "heard_in"].includes(k)) { const l = v.split(",").map(s => s.trim()).filter(Boolean); if (l.length) x[k] = l; else delete x[k]; }
+    else if (["tier", "value", "rank"].includes(k)) { if (v === "") delete x[k]; else x[k] = Number(v); }
+    else if (v === "") delete x[k]; else x[k] = v;
+  });
+  $("detail").querySelectorAll(".chips").forEach(el => { const l = [...el.querySelectorAll(".chip")].map(c => c.dataset.e); if (l.length || el.dataset.k === "evidence") x[el.dataset.k] = l; else delete x[el.dataset.k]; });
+  return x;
+}
+async function save() {
+  const x = read(); delete x._web;
+  const saved = await send("PUT", "register/" + tab, x);
+  if (saved) { await load(true); go(tab, saved.id); }
+}
+async function preview(e) {
+  const r = await fetch(base + "register/media?id=" + encodeURIComponent(e.id));
+  if (!$("preview") || sel !== e.id) return;
+  if (!r.ok) { $("preview").textContent = await r.text(); return; }
+  const type = r.headers.get("Content-Type") || "", same = r.headers.get("X-Same-Version") === "yes";
+  const note = same ? "" : `<div class="msg">Your copy of this file differs from the one this was recorded from.</div>`;
+  if (type.startsWith("image/")) $("preview").innerHTML = `<img src="${URL.createObjectURL(await r.blob())}">` + note;
+  else if (type.startsWith("audio/")) $("preview").innerHTML = `<audio controls src="${URL.createObjectURL(await r.blob())}"></audio>` + note;
+  else $("preview").innerHTML = `<blockquote>${esc(await r.text())}</blockquote>` + note;
+}
+const shown = v => Array.isArray(v) ? v.join(", ") || "none" : v === undefined ? "nothing" : String(v);
+function working() {  // the work-out panel: what to work out, then the changes it offers to pick
+  const w = work, g = R.words.generators, here = R.words.games_here;
+  let h = `<h3 style="margin-top:0">Work out from the games</h3>${msg ? `<div class="msg">${esc(msg)}</div>` : ""}`
+    + `<p class="small">bmab reads your copies of the games and offers what it finds that differs from the register. Nothing changes until you apply what you pick; then Commit as usual.</p>`
+    + `<p><select id="wwhat">${Object.entries(g).map(([k, t]) => `<option value="${k}"${k === w.what ? " selected" : ""}>${esc(t)}</option>`).join("")}</select> in `
+    + `<select id="wgame">${here.map(id => `<option value="${esc(id)}"${id === w.game ? " selected" : ""}>${esc((R.by.sources.get(id) || {}).title || id)}</option>`).join("")}</select> `
+    + `<button id="wgo"${w.state === "running" || w.busy ? " disabled" : ""}>Work out</button></p>`;
+  if (w.busy) h += `<div class="small">Busy ${esc(w.busy)}.</div>`;
+  if (w.state === "running") h += `<div class="small">Working out ${esc(g[w.what])} in ${esc(w.game)}: ${w.seconds} s</div>`;
+  if (w.state === "failed") h += `<div class="msg">It failed after ${w.seconds} s: ${esc(w.why)}</div>`;
+  if (w.state === "done") {
+    const cs = w.changes;
+    h += `<div class="small">${esc(g[w.what])} in ${esc(w.game)}, in ${w.seconds} s: ${cs.length ? many(cs.length, "change") + " to the " + esc(w.table) : "nothing differs from the register"}.</div>`;
+    if (cs.length) h += `<p><button id="wall">Pick all</button> <button id="wnone">Pick none</button></p>` + cs.map((c, i) => {
+      const keys = c.line ? [...new Set([...Object.keys(c.line), ...Object.keys(c.then)])].filter(k => JSON.stringify(c.line[k]) !== JSON.stringify(c.then[k])) : [];
+      return `<div class="change"><label style="display:inline;color:inherit"><input type="checkbox" data-c="${i}"${c.keep ? " checked" : ""}> ${esc(c.change)}</label> `
+        + (c.line ? linkTo(w.table, c.then.id) : esc(c.then.id)) + (c.why ? ` <span class="small">(${esc(c.why)})</span>` : "")
+        + (c.says !== undefined ? `<blockquote>${esc(c.says)}</blockquote><div class="small">${esc(c.then.kind)}, tier ${c.then.tier}, ${c.then.seen_in || c.then.heard_in ? (c.then.seen_in ? "seen in " : "heard in ") + esc((c.then.seen_in || c.then.heard_in).join(", ")) : "in no map"}</div>` : "")
+        + keys.map(k => `<div class="small">${esc(k.replace("_", " "))}: <span class="was">${esc(shown(c.line[k]))}</span> &rarr; <span class="now">${esc(shown(c.then[k]))}</span></div>`).join("") + `</div>`;
+    }).join("") + `<p><button id="wapply">Apply picked</button> <button id="wforget">Forget these</button></p>`;
+  }
+  $("detail").innerHTML = h;
+  $("detail").querySelectorAll("[data-go]").forEach(el => el.onclick = () => { const [t, id] = el.dataset.go.split("|"); go(t, id); });
+  $("wgo").onclick = async () => { const r = await send("POST", "register/workout", { what: $("wwhat").value, game: $("wgame").value }); if (r) { work = r; working(); poll(); } };
+  if ($("wall")) $("wall").onclick = () => $("detail").querySelectorAll("[data-c]").forEach(c => c.checked = true);
+  if ($("wnone")) $("wnone").onclick = () => $("detail").querySelectorAll("[data-c]").forEach(c => c.checked = false);
+  if ($("wapply")) $("wapply").onclick = async () => {
+    const picked = [...$("detail").querySelectorAll("[data-c]:checked")].map(c => w.changes[+c.dataset.c].then);
+    if (!picked.length) return;
+    if (await send("POST", "register/apply", { table: w.table, entries: picked })) { await load(true); work = await (await fetch(base + "register/workout")).json(); working(); }
+  };
+  if ($("wforget")) $("wforget").onclick = async () => { const r = await send("DELETE", "register/workout"); if (r) { work = r; working(); } };
+}
+async function poll() {
+  if (!work || work.state !== "running" && !work.busy) return;
+  setTimeout(async () => { if (!work) return; work = await (await fetch(base + "register/workout")).json(); working(); poll(); }, 2000);
+}
+async function status() {
+  const s = await (await fetch(base + "status")).json(), maps = s.changed.length, reg = s.register.length;
+  $("count").textContent = [reg ? `The register has changes not committed (${s.register.join(", ")})` : "", maps ? `${maps} map${maps > 1 ? "s" : ""} changed` : "",
+    s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push` : ""].filter(Boolean).join(". ") || "Everything is committed and pushed";
+  $("commit").style.display = maps || reg ? "" : "none"; $("discard").style.display = reg ? "" : "none"; $("push").style.display = s.ahead ? "" : "none";
+}
+$("workout").onclick = async () => { sel = null; msg = ""; work = await (await fetch(base + "register/workout")).json(); work.what ??= Object.keys(R.words.generators)[0]; render(); poll(); };
+$("commit").onclick = () => send("POST", "commit").then(status);
+$("push").onclick = () => send("POST", "push").then(status);
+$("discard").onclick = () => { if (confirm("Throw away every change to the register since it was last committed?")) send("POST", "register/discard").then(() => load(true)); };
+addEventListener("hashchange", () => { fromHash(); render(); });
+load();
+</script>
+</body></html>

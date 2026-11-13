@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Black Mesa As Built: inspector</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0b10; color: #ddd; font: 13px system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  button { background: #1c1c28; color: #ddd; border: 1px solid #3a3a4c; border-radius: 4px; padding: 2px 8px; cursor: pointer; font: inherit; }
+  button:hover { background: #2a2a40; }
+  #list { position: absolute; top: 0; left: 0; bottom: 0; width: 220px; overflow-y: auto; background: rgba(15,15,22,0.94); padding: 6px 0; border-right: 1px solid #222; }
+  #list h2 { font-size: 12px; text-transform: uppercase; color: #999; margin: 10px 12px 4px; }
+  #sort { margin: 2px 10px 6px; width: calc(100% - 20px); }
+  .map { padding: 2px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .map:hover { background: #1c1c28; }
+  .map.sel { background: #2a2a40; }
+  .n { color: #999; font-size: 12px; white-space: nowrap; }
+  #top { position: absolute; top: 8px; left: 230px; right: 340px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; pointer-events: none; }
+  #top > * { pointer-events: auto; }
+  #mapname { font-size: 14px; font-weight: 600; background: rgba(15,15,22,0.92); padding: 3px 10px; border-radius: 6px; }
+  .chip { background: rgba(15,15,22,0.92); border: 1px solid #333; border-radius: 12px; padding: 2px 9px; cursor: pointer; font-size: 12px; color: #ccc; }
+  .chip:hover { background: #2a2a40; } a.chip { text-decoration: none; }
+  .grow { flex: 1; pointer-events: none !important; }
+  .slot { background: rgba(15,15,22,0.92); border: 1px solid #333; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; display: flex; gap: 5px; align-items: center; }
+  .slot:hover { background: #2a2a40; }
+  .slot.on { border-color: #ffd04a; color: #ffd04a; }
+  .slot .sym { font-size: 15px; line-height: 1; }
+  .slot .key { color: #777; font-size: 11px; }
+  #markmsg { position: absolute; top: 44px; left: 230px; right: 340px; text-align: center; color: #ffd04a; font-size: 13px; pointer-events: none; }
+  #panel { position: absolute; top: 8px; right: 8px; bottom: 8px; width: 300px; background: rgba(15,15,22,0.92); padding: 8px 10px; border-radius: 6px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
+  #panel label { display: block; cursor: pointer; }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; }
+  #tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid #2c2c3a; }
+  .tab { padding: 2px 6px; cursor: pointer; border-radius: 4px 4px 0 0; color: #aaa; font-size: 12px; }
+  .tab.on { background: #2a2a40; color: #fff; }
+  .tab .n { margin-left: 3px; }
+  .page { display: none; flex: 1; min-height: 0; overflow-y: auto; }
+  .page.on { display: block; }
+  .rows { margin: 2px 0; }
+  .row { display: flex; gap: 6px; align-items: center; padding: 2px 6px; cursor: pointer; font-size: 12px; }
+  .row:hover { background: #1c1c28; }
+  .row.sel { background: #2a2a40; }
+  .row .k { flex: 1; }
+  .row .v { min-width: 44px; text-align: right; color: #999; }
+  .row .v.no { color: #ff8a8a; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .small { color: #999; font-size: 12px; }
+  #save { border-top: 1px solid #2c2c3a; padding-top: 5px; }
+  #save button { margin-right: 4px; }
+  #who a { color: #8cb4ff; }
+  .row input { margin: 0; }
+  .row .why { color: #999; font-size: 11px; }
+  .group { margin: 6px 6px 2px; font-size: 12px; }
+  .group a { color: #8ab4ff; cursor: pointer; margin-left: 6px; }
+  #detail { position: absolute; bottom: 8px; left: 230px; background: rgba(15,15,22,0.94); padding: 8px 12px; border-radius: 6px; max-width: 520px; line-height: 1.5; display: none; max-height: 56vh; overflow-y: auto; }
+  #detail button { margin: 4px 4px 0 0; }
+  #detail a { color: #8cc8ff; }
+  input[type=range] { vertical-align: middle; width: 170px; }
+  select { background: #0b0b10; color: #ddd; border: 1px solid #444; }
+  #msg { position: absolute; top: 45%; left: 230px; right: 340px; text-align: center; font-size: 16px; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -8px 0 0 -8px; border: 1px solid #fff; border-radius: 50%; display: none; pointer-events: none; mix-blend-mode: difference; }
+  #settings { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); width: 480px; max-height: calc(100vh - 100px); overflow-y: auto; background: rgba(15,15,22,0.98); border: 1px solid #333; border-radius: 8px; padding: 12px 16px; display: none; line-height: 1.5; }
+  #settings table { width: 100%; border-collapse: collapse; }
+  #settings td { padding: 1px 4px; }
+  #settings td:last-child { text-align: right; }
+  #settings h3 { margin: 10px 0 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="list"></div>
+<div id="msg">Pick a map on the left.</div>
+<div id="top">
+  <a class="chip" href="../">Front page</a>
+  <span id="prevmaps"></span><span id="mapname">No map loaded</span><span id="nextmaps"></span>
+  <span id="slots"></span>
+  <span class="grow"></span>
+  <button id="reset">Reset view</button><button id="fly">Fly</button><button id="opensettings">Settings</button>
+</div>
+<div id="markmsg"></div>
+<div id="panel">
+  <details><summary>View</summary>
+    <div class="grid">
+      <label><input type="checkbox" id="route" checked> Route</label>
+      <label title="Areas marked as not part of the facility"><input type="checkbox" id="dropped" checked> Not the facility</label>
+      <label><input type="checkbox" id="ceilings"> Ceilings</label>
+      <label title="Each surface is drawn only from the side it faces, so you can see in from outside, and clicks pass through what is hidden."><input type="checkbox" id="fronts"> Front faces only</label>
+      <label title="Brush doors the player or the game opens, drawn shut. Untick to see through them. Model doors go with 3D models."><input type="checkbox" id="opening" checked> Doors that open</label>
+      <label><input type="checkbox" id="connectors" checked> Connectors</label>
+      <label title="Doors the player can't go through, and ought doors (where a door ought to be)"><input type="checkbox" id="doors" checked> Fake doors</label>
+      <label title="Where a map looks like it goes on: space out of sight, dark ends, and where it leads on"><input type="checkbox" id="fake_outs" checked> Fake outs</label>
+      <label><input type="checkbox" id="parts" checked> Parts</label>
+      <label title="Signs the facts register knows: what each says, and where its arrows point"><input type="checkbox" id="signs" checked> Signs</label>
+      <label><input type="checkbox" id="tracks" checked> Tram lines</label>
+      <label title="Orange: a level change's trigger; no fake out is needed within 3 m of it. Green: the space the next level holds too; what is marked there is written to both levels."><input type="checkbox" id="changes" checked> Level changes</label>
+    </div>
+    <label id="modelrow">3D models <select id="modelview"><option value="none">none</option><option value="markers">markers</option><option value="real">real</option></select></label>
+    <label>Surfaces <select id="surf"><option value="real" selected>real textures</option><option value="avg">texture colours</option><option value="plain">plain colours</option></select></label>
+    <details><summary class="small">What the colours mean</summary><div class="small" id="legend"></div></details>
+  </details>
+  <div id="tabs"></div>
+  <div class="page" data-kind="connector"><div class="rows" id="rows-connector"></div></div>
+  <div class="page" data-kind="join"><div class="small">Tick one to see it placed against this map. Green cubes: both fill that space and agree. Red: they disagree.</div><div class="rows" id="rows-join"></div>
+    <div class="small" style="margin-top:8px"><b>Same place</b> as a spot in another map, of this game or another (another edition's too): look at the spot here, then <input id="samemap" list="mapnames" placeholder="game/map" size="16"> <button id="sameadd">Line it up</button></div><div class="rows" id="rows-same_place"></div><datalist id="mapnames"></datalist></div>
+  <div class="page" data-kind="door"><div class="small" id="dlegend"></div><div class="rows" id="rows-door"></div></div>
+  <div class="page" data-kind="fake_out"><label class="small"><input type="checkbox" id="smallh"> Small ones too</label><div class="rows" id="rows-fake_out"></div></div>
+  <div class="page" data-kind="area"><label class="small"><input type="checkbox" id="tiny"> Tiny ones too</label><div class="rows" id="rows-area"></div></div>
+  <div class="page" data-kind="sign"><div class="rows" id="rows-sign"></div></div>
+  <div class="page" data-kind="model"><input id="modelfind" placeholder="Find by name" style="width:95%"><div class="rows" id="rows-model"></div></div>
+  <div class="page" data-kind="part"><div class="small"><label><input type="checkbox" id="allparts"> Every map</label></div><div class="rows" id="rows-part"></div></div>
+  <div class="page" data-kind="place"><div class="small">Which place of the facility the map is in: the most specific one known (what holds it comes from the facts register). Two only for a map that spans two. <a href="../placetree" target="_blank" style="color:#8cc8ff">Every place, as a tree</a></div><div class="rows" id="rows-place"></div>
+    <div class="small"><input id="addplace" list="placelist" placeholder="a place" size="18"> <button id="addplacebtn">Add a place</button></div><datalist id="placelist"></datalist></div>
+  <div class="page" data-kind="again"><div class="small" id="againmsg"></div><div class="rows" id="rows-again"></div>
+    <div style="margin-top:6px"><button id="keep" style="display:none">Keep the ticked</button><button id="closeagain">Close</button></div></div>
+  <div id="save"><button id="again" style="display:none" title="Run the detectors over this map again and pick which of their changes to keep">Evaluate again</button><button id="commit" style="display:none">Commit</button><button id="discard" style="display:none">Discard map</button><button id="push" style="display:none">Push</button><button id="signin" style="display:none" title="Commits and pushes are then yours, made with your GitHub account">Sign in with GitHub</button><button id="signout" style="display:none">Sign out</button><div class="small" id="count"></div><div class="small" id="who"></div><div id="held" style="display:none;color:#f0a060;font-size:12px;margin-top:6px"></div></div>
+</div>
+<div id="detail"></div>
+<div id="cross"></div>
+<div id="settings">
+  <div style="display:flex;justify-content:space-between"><b>Settings</b><button id="closesettings">Close</button></div>
+  <h3>Keys</h3><table id="binds"></table>
+  <div class="small">Click one and press a key; Backspace leaves it without one, Esc keeps it as it was.</div>
+  <button id="resetkeys" style="margin-top:6px">Back to the defaults</button>
+  <h3>Mouse</h3><div class="small">Left drag: orbit, or drag a handle. Right drag: pan. Wheel: zoom (while flying: speed). Hold Shift or Ctrl while turning a handle for 22.5 or 1 degree steps.</div>
+  <h3>How connectors run longer</h3><div class="small">The blue side slides away from the red side as one block. Copies of the section in the white box fill the gap (tinted green), and what is left over, less than one copy, continues as plain wall. The white box should be one whole repeat, from light to light, with both ends on plain wall. The yellow box is all of it that could be taken out; dragging the slider below zero shows that.</div>
+</div>
+<script>
+/*WEBGL*/
+/*SIGNIN*/
+</script>
+<script>
+"use strict";
+const META = /*META*/null;
+const $ = id => document.getElementById(id);
+const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const esc = s => String(s === undefined || s === null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const NAMES = { walk: "Walk (hallway, stairs)", crouch: "Crouch (duct)", climb: "Climb (ladder)", ride: "Ride (tram, lift)", fall: "Fall (drop)",
+                office: "Office", lab: "Lab", industrial: "Industrial", maintenance: "Maintenance", storage: "Storage", living: "Living quarters", transit: "Transit", outdoors: "Outdoors", xen: "Xen" };
+const STYLE_HEX = { office: "#5b9bff", lab: "#b48cff", industrial: "#ff9a3c", maintenance: "#ffd23c", storage: "#b08050", living: "#ff7fbf", transit: "#3cd2ff", outdoors: "#5ccf5c", xen: "#d8ff3c" };
+const styleHex = s => STYLE_HEX[s] || "#9a9a9a";  // grey: the tool found nothing to guess the look from
+const PART_MOST = 2048;  // units: the most a part reaches each way from where it is placed
+const COL_KNOB = { x: [1, 0.35, 0.35, 1], y: [0.35, 1, 0.35, 1], z: [0.4, 0.6, 1, 1], turn: [0.2, 0.9, 1, 1], tilt: [1, 0.7, 0.2, 1], end: [1, 1, 1, 1], box: [0.3, 0.95, 0.5, 1], whole: [1, 0.8, 0.2, 1] };
+const CCOL = { ride: [1, 0.78, 0, 1], crouch: [0.75, 0.55, 1, 1], climb: [0.47, 1, 0.47, 1], fall: [1, 0.6, 0.6, 1], walk: [1, 1, 1, 1] };
+const BEHIND = { nothing: ["nothing behind it: the map ends there", "#ff5a5a", [1, 0.35, 0.35, 1]],
+                 further: ["more of this map, 2 to 13 m behind it", "#ffd04a", [1, 0.82, 0.3, 1]],
+                 next: ["the next room, just through the wall", "#7bd389", [0.48, 0.83, 0.54, 1]] };
+const SHORT = { route: "route", seen: "scenery", teleport: "teleport", unknown: "no vis data", xen: "Xen pocket", unseen: "never seen", holding: "holding box" };
+const WAYS = ["walk", "crouch", "climb", "ride", "fall"];
+const OPENING = { level_change: ["Level change", "#ff8c1a"], connector: ["Connector", "#ffc700"], fake_door: ["Fake door", "#ff5a5a"], ought_door: ["Ought door", "#ff5a5a"],
+                  fake_out: ["Fake out that leads on", "#ff9e3d"], door: ["Door", "#5acbff"], goes_on: ["The map goes on", "#8cff8c"], nothing: ["Nothing past it", "#b4b4b4"] };  // what a part's opening is (bmab.parts.KINDS)  // how the player gets through (bmab.connectors.WAYS)
+const AREA_TYPES = ["holding", "xen", "unseen"];  // what an area that isn't the facility is
+let V = null, cur = null, sel = null, placing = null, tying = false, ghost = null, knobs = [], held = null, pendingPick = null;  // sel: {kind, item}
+let everyPart = [], alone = null;  // every map's parts (the Parts tab's Every map), and the part shown alone: {id, faces, m3}
+const DEFAULT_KEYS = { place1: "1", place2: "2", place3: "3", place4: "4", place5: "5", del: "delete", fly: "f", next: ".", prev: ",", inside: "i", outside: "o", forward: "w", back: "s", left: "a", right: "d", up: "e", down: "q", fast: "shift",
+                       t_fronts: "b", t_ceilings: "c", t_opening: "", models: "m", t_route: "", t_dropped: "", t_connectors: "", t_doors: "", t_fake_outs: "", t_parts: "", t_signs: "", t_tracks: "", t_changes: "" };
+const KEY_NAMES = { place1: "Place a fake door", place2: "Place a connector", place3: "Place a fake out (where the map leads on)", place4: "Place an ought door (where a door ought to be)", place5: "Place a part", del: "Delete what is picked", fly: "Fly", next: "Next map", prev: "Previous map", inside: "Stand inside a connector", outside: "See it from outside", forward: "Fly forward", back: "Fly back", left: "Fly left", right: "Fly right", up: "Fly up", down: "Fly down", fast: "Fly faster",
+                    t_fronts: "Front faces only, on or off", t_ceilings: "Ceilings, on or off", t_opening: "Doors that open, on or off", models: "3D models: none, markers, real", t_route: "Route, on or off", t_dropped: "Not the facility, on or off",
+                    t_connectors: "Connectors, on or off", t_doors: "Fake doors, on or off", t_fake_outs: "Fake outs, on or off", t_parts: "Parts, on or off", t_signs: "Signs, on or off", t_tracks: "Tram lines, on or off", t_changes: "Level changes, on or off" };
+const FLYING = new Set(["forward", "back", "left", "right", "up", "down", "fast"]);
+const savedKeys = JSON.parse(localStorage.getItem("keys") || "{}"), takenKeys = new Set(Object.values(savedKeys));
+let KEYS = { ...Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([a, k]) => [a, takenKeys.has(k) && !(a in savedKeys) ? "" : k])), ...Object.fromEntries(Object.entries(savedKeys).filter(([a]) => a in DEFAULT_KEYS)) }, capturing = null;  // a new action's default that someone already uses for another starts without a key
+const PLACES = [["fake_door", "\u25AF", "Fake door"], ["connector", "\u21C4", "Connector"], ["fake_out", "\u25CE", "Fake out"], ["ought_door", "+", "Ought door"], ["part", "\u25A2", "Part"]];
+const TABS = [["connector", "Connectors"], ["join", "Next maps"], ["door", "Fake doors"], ["fake_out", "Fake outs"], ["area", "Areas"], ["part", "Parts"], ["place", "Places"], ["sign", "Signs"], ["model", "Models"], ["again", "Evaluated again"]];
+const stretch = { m: 0, start: 0, end: null, whole: null };  // the selected connector's preview: metres added, the section that repeats, and the whole length that could be taken out
+const shown = new Map();  // neighbour (game/map) -> its decoded faces, when ticked
+const nbKey = nb => nb.source + "/" + nb.map;  // a neighbour as the app names it
+
+const v3 = { add: (a, b) => a.map((x, i) => x + b[i]), sub: (a, b) => a.map((x, i) => x - b[i]), mul: (a, s) => a.map(x => x * s), dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+             cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], len: a => Math.hypot(...a), unit: a => { const l = Math.hypot(...a) || 1; return a.map(x => x / l); } };
+const clearance = (p, d) => { const far = 6000 / cur.quant, h = V.cast(p, d, far); return h ? h.t : far; };
+const toMap = p => p.map((v, i) => Math.round(v * cur.quant + cur.centre[i]));
+const toLocal = p => p.map((v, i) => (v - cur.centre[i]) / cur.quant);
+const of = k => cur.lines.filter(l => l.kind === k);
+function useClaims(lines) {  // what the redlines say, as the items the page lists and draws
+  cur.lines = lines;
+  cur.doors = [...of("fake_door"), ...of("ought_door")].map(doorItem);
+  cur.fakeOuts = of("fake_out").map(fakeOutItem);
+  cur.connectors = of("connector").map(l => connectorItem(l));
+  cur.parts = of("part").map(partItem);
+  cur.openings = of("opening").map(openingItem);
+  cur.samePlaces = of("same_place").map(sameItem);
+  cur.places = of("place").map(l => ({ ...l, line: l }));
+  const index = new Map(cur.connectors.map((c, i) => [c.id, i]));
+  for (const c of cur.connectors) c.stretchesWith = (c.line.stretches_with || []).map(id => index.get(id)).filter(i => i !== undefined);
+  const areaAt = at => cur.areas.find(p => p.at.join() === at.join()) || cur.areas.filter(p => [0, 1, 2].every(a => p.lo[a] <= at[a] && at[a] <= p.hi[a])).sort((a, b) => a.m3 - b.m3)[0];
+  for (const p of cur.areas) { p.claim = null; p.kind = p.found.kind; }
+  for (const l of of("area")) { const p = areaAt(l.at); if (p) { p.claim = l; p.kind = l.type; } }
+}
+const THROUGH = 64;  // units: the thickest wall a door is the same door on both sides of
+function throughWall(at, back) {  // units from a door's face to the far side of its wall, or null if there is none within THROUGH
+  const h = V.cast(toLocal(at.map((v, i) => v + back[i] * 2)), back, THROUGH / cur.quant);
+  return h ? h.t * cur.quant + 2 : null;
+}
+function doorItem(l) {  // sides 2: the same door shows on the far side of the wall, drawn there too
+  const side = [-l.back[1] * l.width / 2, l.back[0] * l.width / 2, 0], corner = (a, u, d) => toLocal(l.at.map((v, i) => v + a * side[i] + l.back[i] * d + (i === 2 ? u * l.height / 2 : 0)));
+  const far = l.sides === 2 ? throughWall(l.at, l.back) ?? 16 : null, rect = d => [corner(-1, -1, d), corner(1, -1, d), corner(1, 1, d), corner(-1, 1, d)];
+  return { ...l, line: l, status: l.behind, c: toLocal(l.at), tip: toLocal(l.at.map((v, i) => v + l.back[i] * 80)), corners: rect(0), far: far === null ? null : rect(far) };
+}
+function signItem(s) {  // a sign as the server finds it: its outline and its arrows, local units
+  const c = toLocal(s.at), q = (a, b) => v3.add(c, v3.add(v3.mul(s.right, a * s.size[0] / 2 / cur.quant), v3.mul(s.up, b * s.size[1] / 2 / cur.quant)));
+  return { ...s, c, corners: [q(-1, -1), q(1, -1), q(1, 1), q(-1, 1)] };
+}
+function partItem(l) {  // boxes: the first one, then the extra ones, each {at, size, c (local), corners}
+  const boxes = [{ at: l.at, size: l.size }, ...(l.extra_boxes || [])].map(b => ({ ...b, c: toLocal(b.at), corners: partCorners({ ...b, facing: l.facing }) }));
+  return { ...l, line: l, c: boxes[0].c, corners: boxes[0].corners, boxes };
+}
+const boxOf = () => sel.item.boxes[sel.box] || sel.item.boxes[0];  // the picked part's box its handles work on
+function partCorners(l) {  // a part's box, local units: the four bottom corners, then the four above them
+  const f = l.facing, s = [-f[1], f[0], 0], c = toLocal(l.at), [L, W, H] = l.size.map(v => v / 2 / cur.quant), out = [];
+  for (const z of [-1, 1]) for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) out.push(v3.add(c, v3.add(v3.mul(f, a * L), v3.add(v3.mul(s, b * W), [0, 0, z * H]))));
+  return out;
+}
+const boxPairs = q => [0, 1, 2, 3].flatMap(k => [...q[k], ...q[(k + 1) % 4], ...q[k + 4], ...q[(k + 1) % 4 + 4], ...q[k], ...q[k + 4]]);
+function roomWay(p) {  // the way a room runs at p: square to its nearest wall, along or across, whichever reaches further
+  let near = null;
+  for (let k = 0; k < 16; k++) { const h = V.cast(p, dirFrom(k * Math.PI / 8, 0), PART_MOST / cur.quant); if (h && Math.abs(h.normal[2]) < 0.5 && (!near || h.t < near.t)) near = h; }
+  if (!near) return [1, 0, 0];
+  const w = v3.unit([near.normal[0], near.normal[1], 0]), along = snappedDir([-w[1], w[0], 0]), across = [-along[1], along[0], 0];
+  const through = t => clearance(p, t) + clearance(p, v3.mul(t, -1));
+  return through(along) >= through(across) ? along : across;
+}
+function partFit(p, way) {  // an upright box around p (local units) reaching to the walls, floor and ceiling of the room it is in, square to its walls (or to way)
+  const t = way || roomWay(p), s = [-t[1], t[0], 0], most = PART_MOST / cur.quant;
+  const reach = d => Math.min(clearance(p, d), most), a = reach(t), b = reach(v3.mul(t, -1)), l = reach(s), r = reach(v3.mul(s, -1)), up = reach([0, 0, 1]), down = reach([0, 0, -1]);
+  const q = v3.add(p, v3.add(v3.mul(t, (a - b) / 2), v3.add(v3.mul(s, (l - r) / 2), [0, 0, (up - down) / 2])));
+  return { at: toMap(q), facing: rounded(t), size: [a + b, l + r, up + down].map(v => Math.max(32, Math.round(v * cur.quant / 8) * 8)) };
+}
+const fakeOutItem = l => ({ ...l, line: l, c: toLocal(l.at), to: toLocal(l.reaches), from: toLocal(l.seen_from) });
+function outlineOf(l) {  // where a connector is, as the page draws it
+  const ring = l.outline.map(toLocal), a = v3.sub(ring[1], ring[0]), b = v3.sub(ring[3], ring[0]);
+  return { axes: [v3.unit(a), v3.unit(b)], half: [v3.len(a) / 2 / cur.per_metre, v3.len(b) / 2 / cur.per_metre], middle_local: toLocal(l.at) };
+}
+function measureOf(l) {  // what a connector's shape says, in metres, as bmab.connectors.measured works it out: the redlines keep only the shape
+  const p = l.path, r = l.outline, along = [0];
+  for (let k = 1; k < p.length; k++) along.push(along[k - 1] + v3.len(v3.sub(p[k], p[k - 1])) * 0.0254);
+  const mid = p.reduce((b, q, k) => v3.len(v3.sub(q, l.at)) < v3.len(v3.sub(p[b], l.at)) ? k : b, 0), w = along.map((_, k) => k).filter(k => Math.abs(along[k] - along[mid]) <= 3);
+  const span = along[w[w.length - 1]] - along[w[0]], straight = span > 0 ? v3.len(v3.sub(p[w[w.length - 1]], p[w[0]])) * 0.0254 / span : 1;
+  let rise = 0;
+  for (let k = 1; k < p.length; k++) rise += Math.abs(p[k][2] - p[k - 1][2]) * 0.0254;
+  return { length_m: +along[along.length - 1].toFixed(1), rise_m: +rise.toFixed(1), section_m2: +(v3.len(v3.sub(r[1], r[0])) * v3.len(v3.sub(r[3], r[0])) * 0.0254 * 0.0254).toFixed(1), curved: straight < 0.97 };
+}
+function connectorItem(l, moving) {  // moving: a handle is being dragged, the faces around it aren't gathered yet
+  if (!cur.cuts[l.id] && !moving) cur.cuts[l.id] = handCut(l);
+  return { ...l, ...cur.cuts[l.id], ...outlineOf(l), ...measureOf(l), line: l, path: l.path.map(toLocal), outline: l.outline.map(toLocal), stretchesWith: [] };
+}
+function handCut(l) {  // a connector's cut until the app says how it parts the map
+  const out = outlineOf(l);
+  return { rooms: null, slab: { m: 2, clean: true, back_m: clearance(out.middle_local, v3.mul(l.along, -1)) / cur.per_metre }, proof: { text: "Placed or moved by hand.", box: null } };
+}
+const SHAPED_BY = ["at", "along", "outline"];
+async function syncCuts() {  // ask how the map is cut now: which room each surface is in, which cuts part nothing, and what each passage is like
+  const name = keyOf(cur), was = $("markmsg").textContent;
+  $("markmsg").textContent = "working out what the cut parts...";
+  const r = await send("POST", "cut/" + name);
+  if (!cur || keyOf(cur) !== name) return;
+  $("markmsg").textContent = was;
+  if (!r) return;
+  cur.left_out = new Set(r.left_out);
+  for (const id of Object.keys(cur.cuts)) if (!(id in r.shapes)) delete cur.cuts[id];
+  for (const [id, sh] of Object.entries(r.shapes)) cur.cuts[id] = { ...cur.cuts[id], rooms: null, ...r.cuts[id], whole: sh.whole, slab: sh.slab, proof: { text: sh.proof.text, box: sh.proof.box && sh.proof.box.map(toLocal) } };
+  const g = V.geometry(), n = g.pos.length / 3;
+  cur.vertex_room = new Int32Array(n);
+  if (r.cells) {
+    const cells = new Int16Array(decodeBase64(r.cells)), room = new Uint16Array(decodeBase64(r.room)), at = new Map(), key = (x, y, z) => (x + 4096) * 67108864 + (y + 4096) * 8192 + z + 4096;
+    for (let i = 0; i < room.length; i++) at.set(key(cells[i * 3], cells[i * 3 + 1], cells[i * 3 + 2]), room[i]);
+    const CELL = r.cell;
+    for (let i = 0; i < n; i++) {
+      const q = [0, 1, 2].map(a => Math.floor((g.pos[i * 3 + a] * cur.quant + cur.centre[a] + g.nrm[i * 3 + a] / 127 * CELL / 2) / CELL));
+      let found = -1;
+      search: for (let reach = 0; reach <= 3; reach++) for (let x = -reach; x <= reach; x++) for (let y = -reach; y <= reach; y++) for (let z = -reach; z <= reach; z++) {
+        const v = at.get(key(q[0] + x, q[1] + y, q[2] + z));
+        if (v !== undefined) { found = v; break search; }
+      }
+      cur.vertex_room[i] = found;
+    }
+  } else cur.vertex_room.fill(-1);
+  splitByRoom();
+  changed(cur.lines);
+}
+function splitByRoom() {  // one item for each area and room, so the sides of a cut through an area colour apart: a face is in the room most of its corners are
+  const g = V.geometry(), I = g.idx, items = new Uint16Array(cur.base_items.length), pair = new Map(), area = [], room = [];
+  for (let t = 0; t < I.length;) {  // a face's triangles fan from its first corner, its corners following on
+    const first = I[t], votes = new Map();
+    let last = first;
+    for (; t < I.length && I[t] === first; t += 3) last = Math.max(last, I[t + 2]);
+    for (let v = first; v <= last; v++) if (cur.vertex_room[v] >= 0) votes.set(cur.vertex_room[v], (votes.get(cur.vertex_room[v]) || 0) + 1);
+    const r_ = votes.size ? [...votes].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0] : 0, a = cur.base_area[cur.base_items[first]], k = a * 65536 + r_;
+    if (!pair.has(k)) { pair.set(k, area.length); area.push(a); room.push(r_); }
+    items.fill(pair.get(k), first, last + 1);
+  }
+  cur.item_area = area; cur.item_room = room;
+  V.setItems(items, area.length + 3);
+}
+function changed(lines, id) {  // the claims changed: draw them again and keep the selection
+  const was = sel;
+  useClaims(lines);
+  if (was && !["area", "join", "sign", "model"].includes(was.kind)) {
+    const it = { connector: cur.connectors, door: cur.doors, fake_out: cur.fakeOuts, part: cur.parts, opening: cur.openings, place: cur.places, same_place: cur.samePlaces }[was.kind].find(x => x.id === (id || was.item.id));
+    sel = it ? { kind: was.kind, item: it, box: it.boxes && was.box < it.boxes.length ? was.box : 0 } : null;
+  }
+  colours(); moved(); overlay(); refresh(); placesTitle();
+}
+async function send(method, path, body) {
+  const r = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!r.ok) { $("count").textContent = "Could not save: " + await r.text(); return null; }
+  return r.json();
+}
+async function store(line) {
+  const old = cur.lines.find(l => l.id === line.id), saved = await send("PUT", "claims/" + keyOf(cur), line);
+  if (!saved) return null;
+  if (saved.kind === "part") { if (alone && alone.id === saved.id) { alone = null; V.alone(null); } if ($("allparts").checked) everyMap(); }
+  const differs = k => !old || JSON.stringify(old[k]) !== JSON.stringify(saved[k]), connector = saved.kind === "connector", moved = connector && SHAPED_BY.some(differs);
+  if (moved) delete cur.cuts[saved.id];
+  const lines = saved.kind === "part" ? await (await fetch("claims/" + keyOf(cur))).json() : [...cur.lines.filter(l => l.id !== saved.id), saved];  // a part's openings are found again with it
+  changed(lines, saved.kind === "opening" ? undefined : saved.id); status();  // an opening is edited with its part picked
+  if (moved || (connector && (differs("stretches_with") || differs("start_m")))) syncCuts();
+  if (saved.kind === "opening" && alone) openingsAgain();
+  return saved;
+}
+async function unstore(line) {
+  if (await send("DELETE", `claims/${keyOf(cur)}/${line.id}`)) { if (line.kind === "part") { if (alone && alone.id === line.id) { alone = null; V.alone(null); } if ($("allparts").checked) everyMap(); } delete cur.cuts[line.id]; changed(cur.lines.filter(l => l.id !== line.id && l.part !== line.id)); status(); if (line.kind === "connector") syncCuts();
+    if (line.kind === "opening" && alone) { if (!sel) { const p = cur.parts.find(x => x.id === line.part); if (p) pick("part", p, false); } openingsAgain(); } }
+}
+const lineOf = s => s.item.line || s.item.claim;
+function edit(changes) {
+  const next = { ...lineOf(sel) };
+  for (const [k, v] of Object.entries(changes)) { if (v === "" || v === null) delete next[k]; else next[k] = v; }
+  store(next);
+}
+let changedMaps = [], signingIn = false, redlinesHere = null;  // changedMaps: game/map of each
+const keyOf = m => m.source + "/" + m.name;  // a map as the app names it: its game and its name
+async function signIn() {
+  signingIn = true; $("signin").style.display = "none";
+  const said = await gitHubSignIn(html => { $("who").innerHTML = html; });
+  signingIn = false;
+  if (said !== "done") $("who").textContent = said;
+  status();
+}
+function showHeld(data, v) {  // claims made on another file of the map than this computer's: edits wait until someone checks them
+  $("held").style.display = v.same ? "none" : "";
+  if (v.same) return;
+  $("held").innerHTML = `This map's claims were made on another version of its file (${v.claims.sha256.slice(0, 8)}) than yours (${v.here.sha256.slice(0, 8)}). Check that they still fit, then <button id="fits">They fit my file</button>. Until then they can't be changed.`;
+  $("fits").onclick = async () => { const r = await fetch("version/" + keyOf(data), { method: "POST" }); if (r.ok && cur === data) showHeld(data, await r.json()); status(); };
+}
+async function status() {
+  const s = await (await fetch("status")).json(), n = s.changed.length, names_ = s.changed.map(c => c.map);
+  changedMaps = s.changed.map(c => c.game + "/" + c.map);
+  const names = n > 3 ? `${names_.slice(0, 3).join(", ")} and ${n - 3} more` : names_.join(", ");
+  $("count").textContent = [n ? `Changed, not committed: ${names}` : "", s.register.length ? "The register has changes not committed" : "",
+    s.ahead ? `${s.ahead} commit${s.ahead > 1 ? "s" : ""} to push` : ""].filter(Boolean).join(". ") || "Everything is committed and pushed";
+  $("commit").style.display = n || s.register.length ? "" : "none";
+  $("discard").style.display = cur && changedMaps.includes(keyOf(cur)) ? "" : "none";
+  $("push").style.display = s.ahead && !s.pull_request ? "" : "none";
+  $("again").style.display = cur ? "" : "none";
+  $("signin").style.display = s.github && !s.login && !signingIn ? "" : "none";
+  $("signout").style.display = s.login ? "" : "none";
+  if (!signingIn) $("who").innerHTML = [s.login ? `Signed in with GitHub as ${esc(s.login)}` : "",
+    s.pull_request ? `Your commits are offered in <a href="${esc(s.pull_request)}" target="_blank" rel="noopener">a pull request</a>; commit more and push again to add them to it` : "",
+    s.redlines ? "" : "The redlines aren't cloned here yet: sign in with GitHub to clone them"].filter(Boolean).join(". ");
+  if (redlinesHere === false && s.redlines && cur) load(keyOf(cur));  // just cloned: the map's claims
+  redlinesHere = s.redlines;
+}
+
+// ---------- lists ----------
+const listedFakeOut = h => h.type === "leads_on" || (h.type === "dark_end" ? h.m2 >= 20 : h.m3 >= 100) || $("smallh").checked || (sel && sel.item === h);
+function items(kind) {
+  if (!cur) return [];
+  if (kind === "connector") return cur.connectors;
+  if (kind === "join") return [...cur.neighbours].sort((a, b) => (a.kind === "same") - (b.kind === "same"));
+  if (kind === "door") return cur.doors;
+  if (kind === "fake_out") return cur.fakeOuts.filter(listedFakeOut);
+  if (kind === "part") return cur.parts;
+  if (kind === "place") return cur.places || [];
+  if (kind === "same_place") return cur.samePlaces || [];
+  if (kind === "sign") return cur.signs || [];
+  if (kind === "model") return modelList();
+  if (kind === "area") return cur.areas.filter(p => $("tiny").checked || p.m3 >= 20 || (sel && sel.item === p)).sort((a, b) => (a.kind === "route") - (b.kind === "route") || b.m3 - a.m3);
+  return [];
+}
+function label(kind, it) {
+  if (kind === "same_place") return [`<span class="sw" style="background:#8cd0ff"></span><span class="k">${esc(it.map)}</span>`, it.changed ? "another version" : ""];
+  if (kind === "place") return [`<span class="sw" style="background:#ffd23c"></span><span class="k">${esc(placeName(it.place))}</span>`, ""];
+  if (kind === "connector") return [`<span class="sw" style="background:rgb(${CCOL[it.way].slice(0, 3).map(v => v * 255)})"></span><span class="k">${NAMES[it.way]}</span>`, `${Math.round(it.length_m)} m`];
+  if (kind === "join") return [`<input type="checkbox" data-map="${nbKey(it)}" ${shown.has(nbKey(it)) ? "checked" : ""}><span class="k">${it.map} <span class="small">${it.kind === "same" ? "same place, " + esc(it.game) : "level change, " + esc(it.kind)}</span></span>`, ""];
+  if (kind === "door") return [`<span class="sw" style="background:${BEHIND[it.status][1]}"></span><span class="k">${it.id.slice(0, 4)}${it.kind === "ought_door" ? " ought door" : ""}</span>`, `${(it.height * 0.0254).toFixed(1)} m`];
+  if (kind === "fake_out") return [`<span class="sw" style="background:${it.type === "dark_end" ? "#b070ff" : it.type === "leads_on" ? "#ff9d3c" : "#33e6ff"}"></span><span class="k">${it.id.slice(0, 4)} ${it.type === "dark_end" ? "dark end" : it.type === "leads_on" ? "leads on" : it.m3.toLocaleString() + " m³ out of sight"}</span>`, it.type === "dark_end" ? it.m2 + " m²" : ""];
+  if (kind === "area") return [`<span class="sw" style="background:${META.area_kinds[it.kind].colour}"></span><span class="k">#${it.id} ${SHORT[it.kind]}</span>`, `${it.m3.toLocaleString()} m³`];
+  if (kind === "sign") return [`<span class="sw" style="background:#8cff8c"></span><span class="k">${esc(it.transcription || it.evidence.split("/").pop())}</span>`, [it.door === "opens" ? "on a door that opens" : it.door === "shut" ? "on a shut door" : "", it.points.length ? `${it.points.length} arrow${it.points.length > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ")];
+  if (kind === "model") return [`<span class="sw" style="background:#b4b4b4"></span><span class="k" title="${esc(it.name)}">${esc(it.name.replace(/^models\//, "").replace(/\.mdl$/, ""))}</span>`, `${it.markers.length}`];
+  if (kind === "part") return [`<span class="sw" style="background:${styleHex(it.style)}"></span><span class="k">${it.id.slice(0, 4)} ${it.style ? NAMES[it.style] : "look not known"}</span>`, it.size.map(v => (v * 0.0254).toFixed(1)).join(" x ") + " m" + (it.boxes.length > 1 ? ` +${it.boxes.length - 1}` : "")];
+}
+const FLY_SPEED = 640;  // units a second: about twice a player's run
+function listRows() {
+  for (const kind of ["connector", "join", "door", "fake_out", "area", "part", "place", "same_place", "sign", "model"]) {
+    const list = items(kind);
+    if ($("n-" + kind)) $("n-" + kind).textContent = list.length || "";
+    $("rows-" + kind).innerHTML = list.length ? list.map((it, i) => {
+      const [left, right] = label(kind, it), flag = kind === "area" && it.claim ? "not facility" : "";
+      return `<div class="row${sel && sel.item === it ? " sel" : ""}" data-i="${i}">${left}<span>${right}</span><span class="v${kind === "area" && it.claim ? " no" : ""}">${flag}</span></div>`;
+    }).join("") : `<div class="small" style="padding:2px 6px">none</div>`;
+    $("rows-" + kind).querySelectorAll(".row").forEach(el => { el.onclick = e => {
+      if (e.target.dataset.map) return toggleNeighbour(e.target.dataset.map, e.target.checked);
+      pick(kind, list[+el.dataset.i], true);
+    }; });
+  }
+  if ($("allparts").checked) {  // every map's parts: a click opens its map there
+    $("n-part").textContent = everyPart.length || "";
+    $("rows-part").innerHTML = everyPart.map((r, i) => `<div class="row${sel && sel.kind === "part" && sel.item.id === r.id ? " sel" : ""}" data-i="${i}"><span class="sw" style="background:${styleHex(r.style)}"></span><span class="k">${esc(r.map)} ${r.id.slice(0, 4)} ${r.style ? NAMES[r.style] : "look not known"}</span><span>${r.size.map(v => (v * 0.0254).toFixed(1)).join(" x ")} m</span></div>`).join("") || `<div class="small" style="padding:2px 6px">none</div>`;
+    $("rows-part").querySelectorAll(".row").forEach(el => { el.onclick = () => {
+      const r = everyPart[+el.dataset.i], it = cur && keyOf(cur) === r.game + "/" + r.map ? cur.parts.find(x => x.id === r.id) : null;
+      if (it) pick("part", it, true); else { pendingPick = { kind: "part", at: r.at }; load(r.game + "/" + r.map); }
+    }; });
+  }
+}
+function modelList() {  // the map's models, each with the markers of its copies; filtered by the find box
+  if (!cur.models) {
+    cur.models = cur.prop_names.map(name => ({ name, markers: [], at: 0 }));
+    cur.props.forEach((p, i) => cur.models[p[3]].markers.push(i));
+    cur.models = cur.models.filter(m => m.markers.length).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const find = $("modelfind").value.trim().toLowerCase();
+  return find ? cur.models.filter(m => m.name.includes(find)) : cur.models;
+}
+let modelAlone = true;  // a picked model is shown on its own, not in the map
+function lookModel(it) {
+  const m = it.markers[it.at];
+  if ($("modelview").value !== "real") { $("modelview").value = "real"; modelView(); }
+  const at = cur.modelPlace ? cur.modelPlace.get(m) : null;
+  if (!at) {
+    V.solo = null; V.cam.target = cur.props[m].slice(0, 3); V.cam.dist = 200 / cur.quant;
+    $("markmsg").textContent = cur.modelPlace === null ? "this page was built before models could be shown alone: rebuild it" : cur.modelPlace ? "this model's shape isn't on the page: its files are missing or can't be read" : "loading the models...";
+    return;
+  }
+  const [part, copy, middle, size] = at;
+  V.solo = modelAlone ? { part, copy } : null;
+  V.cam.target = middle; V.cam.dist = Math.max(Math.max(...size) * 1.6, 30) / cur.quant; V.cam.pitch = 0.35;
+  $("markmsg").textContent = "";
+}
+async function everyMap() { everyPart = $("allparts").checked ? await (await fetch("parts")).json() : []; listRows(); }
+async function showAlone(it) {  // the part as it is worked out from the map: the space in its box joined to its middle, and the faces around it
+  if (alone && alone.id === it.id) { alone = null; V.alone(null); detail(); return; }
+  $("markmsg").textContent = "working out the part...";
+  const r = await fetch(`part/${keyOf(cur)}/${it.id}`);
+  if (!r.ok) { $("markmsg").textContent = await r.text(); return; }
+  const a = await r.json(), g = V.geometry();
+  if (a.vertices !== g.item.length) { $("markmsg").textContent = "this page was built with other faces for the map: rebuild it to see a part alone"; return; }
+  const keep = new Uint8Array(a.vertices);
+  for (const [first, n] of a.runs) keep.fill(1, first, first + n);
+  const f = it.facing;
+  V.alone(keep, it.boxes.map(b => ({ c: b.c, axes: [f, [-f[1], f[0], 0], [0, 0, 1]], half: b.size.map(v => v / 2 / cur.quant) })));
+  alone = { id: it.id, faces: a.faces, m3: a.m3, signs: a.signs, openings: a.openings, op: -1 };
+  $("markmsg").textContent = ""; look("part", it); detail();
+}
+function refresh() { listRows(); detail(); }
+function showTab(kind) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.kind === kind));
+  document.querySelectorAll(".page").forEach(t => t.classList.toggle("on", t.dataset.kind === kind));
+}
+
+// ---------- what a pick looks like ----------
+function pick(kind, item, focus, box = 0) {  // box: which of a part's boxes the handles work on
+  if (tying && kind === "connector" && sel && sel.kind === "connector" && item !== sel.item) { tying = false; $("markmsg").textContent = ""; return tie(sel.item.line, item.line); }
+  if (alone && !((kind === "part" && item.id === alone.id) || (kind === "opening" && item.part === alone.id))) { alone = null; V.alone(null); }
+  if (kind !== "model") V.solo = null;
+  sel = { kind, item, box };
+  if (kind !== "area") showTab(kind === "opening" ? "part" : kind === "same_place" ? "join" : kind);
+  if (kind === "same_place" && !sameFaces.has(item.game + "/" + item.map)) loadOther(item.game + "/" + item.map, () => moved());
+  stretch.m = 0; stretch.start = 0; stretch.end = null; stretch.whole = null;
+  if (kind === "connector") { if (item.start_m !== undefined) stretch.start = item.start_m; if (item.end_m !== undefined) stretch.end = item.end_m; }
+  if (focus) look(kind, item);
+  colours(); moved(); overlay(); refresh();
+}
+function lookFrom(target, eye) {
+  const v = [0, 1, 2].map(i => eye[i] - target[i]), len = Math.hypot(...v) || 1;
+  V.cam.target = target; V.cam.dist = Math.max(60 / cur.quant, len);
+  V.cam.yaw = Math.atan2(v[1], v[0]); V.cam.pitch = Math.max(-1.5, Math.min(1.5, Math.asin(Math.max(-1, Math.min(1, v[2] / len)))));
+}
+function look(kind, it) {
+  if (kind === "connector") return standInside(it);
+  if (kind === "model") return lookModel(it);
+  if (kind === "door") { V.cam.target = it.c; V.cam.yaw = Math.atan2(-it.back[1], -it.back[0]); V.cam.pitch = 0.2; V.cam.dist = 240 / cur.quant; V.show = [1, 1, +$("ceilings").checked]; }
+  if (kind === "fake_out") lookFrom(it.c, it.from);
+  if (kind === "area") { const c = [0, 1, 2].map(i => (it.plo[i] + it.phi[i]) / 2), s = Math.max(...[0, 1, 2].map(i => it.phi[i] - it.plo[i])); V.cam.target = c; V.cam.dist = Math.max(s * 1.8, 40); }
+  if (kind === "sign") { V.cam.target = it.c; V.cam.yaw = Math.atan2(it.normal[1], it.normal[0]); V.cam.pitch = Math.abs(it.normal[2]) > 0.7 ? 1.4 * Math.sign(it.normal[2]) : 0.15; V.cam.dist = Math.max(160, Math.max(...it.size) * 2) / cur.quant; }
+  if (kind === "join") { V.cam.target = it.at_local; V.cam.dist = 1200 / cur.quant; V.cam.pitch = 0.6; }
+  if (kind === "part") { V.cam.target = it.c; V.cam.dist = Math.max(...it.size) * 1.2 / cur.quant; V.cam.pitch = 0.6; }
+  if (kind === "same_place") { V.cam.target = it.c; V.cam.dist = 1200 / cur.quant; V.cam.pitch = 0.6; }
+  if (kind === "opening") {  // from inside the part
+    const f = it.facing;
+    V.cam.target = it.c;
+    if (Math.abs(f[2]) > 0.7) V.cam.pitch = f[2] < 0 ? 1.2 : -0.6;
+    else { V.cam.yaw = Math.atan2(-f[1], -f[0]); V.cam.pitch = 0.25; }
+    V.cam.dist = Math.max(Math.max(...it.size) * 1.8, 160) / cur.quant;
+  }
+}
+function standInside(c) {
+  V.show = [1, 1, 1];
+  const back = Math.max(1.5, Math.min(c.slab.back_m * 0.85, 12)) * cur.per_metre, m = c.middle_local;
+  lookFrom(m, m.map((v, a) => v - c.along[a] * back));
+  overlay();
+}
+function seeOutside(c) {
+  V.show = [1, 1, 0];
+  const size = Math.max(c.length_m * 1.3, 30) * cur.per_metre, t = c.along, m = c.middle_local, side = Math.abs(t[2]) > 0.9 ? [1, 0, 0] : [-t[1], t[0], 0];
+  lookFrom(m, [m[0] + side[0] * size, m[1] + side[1] * size, m[2] + (Math.abs(t[2]) > 0.9 ? size * 0.25 : size * 0.7)]);
+  overlay();
+}
+function detail() {
+  const box = $("detail");
+  if (!sel) { box.style.display = "none"; return; }
+  const { kind, item } = sel;
+  box.innerHTML = describe(kind, item) + editor(kind, item);
+  box.style.display = "block";
+  wire(kind, item);
+}
+function editor(kind, it) {  // the fields of what is claimed, and how to change it
+  let html = "";
+  if (kind === "area" && !it.claim) return `<button id="notfac">This isn't part of the facility</button>`;
+  const l = it.line || it.claim;
+  if (!l || kind === "join") return html;
+  if (kind === "opening") html += `<button id="backpart">Back to the part</button>`;
+  if (kind === "connector" || kind === "fake_out" || kind === "opening") html += `<div title="How the player gets through">Way through: <select id="way">${l.way ? "" : `<option value="" selected>not known</option>`}${WAYS.map(x => `<option value="${x}"${x === l.way ? " selected" : ""}>${NAMES[x]}</option>`).join("")}</select></div>`;
+  const looks = { part: "Looks like", fake_out: "Where it leads looks like", door: "What should be behind it looks like" }[kind];
+  if (looks && (kind !== "door" || l.behind === "nothing")) html += `<div>${looks}: <select id="style">${l.style ? "" : `<option value="" selected>not known</option>`}${Object.keys(STYLE_HEX).map(x => `<option value="${x}"${x === l.style ? " selected" : ""}>${NAMES[x]}</option>`).join("")}</select></div>`;
+  if (kind === "part") html += `<button id="alone">${alone && alone.id === it.id ? "Show the map" : "Show it alone"}</button><button id="refit">Fit ${it.boxes.length > 1 ? "this box " : ""}to the room</button><button id="addbox">Add a box</button>${sel.box ? `<button id="dropbox">Delete this box</button>` : ""}`;
+  if (kind === "door") html += `<label><input type="checkbox" id="sides"${l.sides === 2 ? " checked" : ""}> The same door on the other side of the wall</label>`;
+  if (kind === "area") html += `<div>What it is: <select id="type">${AREA_TYPES.map(x => `<option value="${x}"${x === l.type ? " selected" : ""}>${SHORT[x]}</option>`).join("")}</select></div>`;
+  return html + `<button id="del">${kind === "area" ? "It is part of the facility after all" : "Delete this"}</button>`;
+}
+function describe(kind, it) {
+  if (kind === "same_place") {
+    const other = ([...otherMaps, ...META.maps].find(m => m.source === it.game && m.name === it.map) || {}).game;
+    return `<b>Same place</b> <span class="small">as ${esc(it.map)}${other ? ` (${esc(other)})` : ""}, drawn in blue${sameFaces.has(it.game + "/" + it.map) ? "" : " once it has loaded"}. Drag the arrows until the two maps' walls meet; it saves when you let go.</span><br>` +
+      `<label><input type="checkbox" id="samechanged"${it.changed ? " checked" : ""}> Another version of the place (damaged, rebuilt): only where it is counts, not its walls</label><br>`;
+  }
+  if (kind === "place") {
+    const up = cur.placeNames.parents[it.place] || [], named = cur.placeNames.named.slice(0, 8);
+    return `<b>Place</b> <span class="small">the map is in</span><br>` +
+      `<input id="placename" list="placelist" value="${esc(it.place)}" style="width:60%"> <span class="small">${up.length ? `which is in ${up.map(p => esc(placeName(p))).join(", ")}` : ""}</span><br>` +
+      (named.length ? `<span class="small">Named in this map: ${named.map(p => `<a href="#" data-place="${p}">${esc(placeName(p))}</a>`).join(", ")}</span><br>` : "") +
+      `<span class="small">Type a place of the facts register, or a new one in small letters and hyphens.</span><br>`;
+  }
+  if (kind === "opening") {
+    const d = alone && alone.openings.find(o => o.id === it.id);
+    return `<b>Opening</b> <span class="small">of part ${esc(it.part.slice(0, 4))}, where something can join it${d ? `: ${openingText({ ...d, size: it.size, facing: it.facing })}` : ""}. Drag its arrows to move it and the handles on its edges to size it.</span><br>`;
+  }
+  if (kind === "model") {
+    const at = cur.modelPlace ? cur.modelPlace.get(it.markers[it.at]) : null, sh = at ? cur.modelShapes[at[0]] : null, n = it.markers.length;
+    const about = sh ? [`${sh.size.map(v => (v * 0.0254).toFixed(1)).join(" x ")} m`, `${Math.round(at[4]).toLocaleString()} triangles drawn`,
+      sh.pose === null || sh.pose === undefined ? "" : sh.pose ? `standing as its "${esc(sh.pose)}" animation begins` : "standing as its first animation begins", sh.skin ? `skin ${sh.skin}` : ""] : [];
+    return `<b>Model</b> ${esc(it.name)}<br><span class="small">${[`${n} in this map${n > 1 ? `, this is ${it.at + 1}` : ""}`, ...about].filter(Boolean).join("; ")}</span><br>` +
+      (n > 1 ? `<button id="mprev">Previous</button><button id="mnext">Next</button>` : "") + `<button id="msolo">${modelAlone ? "Show the map around it" : "Show it alone"}</button>`;
+  }
+  if (kind === "area") {
+    const k = META.area_kinds[it.kind], size = it.hi.map((h, i) => Math.round((h - it.lo[i]) * 0.0254));
+    return `<b>Area ${it.id}</b>: <span class="sw" style="background:${k.colour}"></span>${k.label}, ${it.m3.toLocaleString()} m³, about ${size.join(" x ")} m${it.claim ? `, <b>not the facility</b>` : ""}<br>` +
+      `<span class="small">textures: ${(it.textures || []).map(t => `${esc(t[0])} (${t[1]} m²)`).join(", ")}</span>`;
+  }
+  if (kind === "door") {
+    const m = v => (v * 0.0254).toFixed(1);
+    return `<b>${it.kind === "ought_door" ? "Ought door" : "Fake door"}</b>: ${it.kind === "ought_door" ? "where a door ought to be and isn't" : "a door the player can't go through"}, about ${m(it.width)} x ${m(it.height)} m<br>` +
+      `Behind it: <span class="sw" style="background:${BEHIND[it.status][1]}"></span><b>${BEHIND[it.status][0]}</b>${it.sides === 2 ? ", and the same door shows there" : ""}<br>`;
+  }
+  if (kind === "fake_out") {
+    const size = surfaceSize(it), what = it.type === "dark_end" ? "a dark end" : it.type === "leads_on" ? "leads on" : `${it.m3.toLocaleString()} m³ out of sight`;
+    return `<b>Fake out</b> <span class="small">where the map looks like it goes on: ${what}, ${size ? `surface about ${size.join(" x ")} m` : "not on a surface: move it onto one"}</span><br>`;
+  }
+  if (kind === "sign") {
+    const says = c => esc(c.filter(Boolean).join(" ").replace(/-/g, " ")), way = d => { const r = v3.dot(d, it.right), f = -v3.dot(d, it.normal); return d[2] < -0.7 ? "below it" : Math.abs(r) > Math.abs(f) ? (r > 0 ? "to its right" : "to its left") : "straight on, past it"; };
+    return `<b>Sign</b> ${it.transcription ? `"${esc(it.transcription)}"` : `<span class="small">${esc(it.evidence)} (not transcribed yet)</span>`}<br>` +
+      (it.claims.length ? `<span class="small">Says: ${it.claims.map(says).join("; ")}</span><br>` : "") +
+      (it.points.length ? `<span class="small">Arrows: ${it.points.map(p => `${esc(p.to.replace(/-/g, " "))} ${way(p.dir)}`).join("; ")}</span><br>` : "") +
+      (it.door === "opens" ? `<span class="small">On a door that opens. It is shown where the door stands shut, the only place it can be read; a place it names is through the door.</span><br>` : "") +
+      (it.door === "shut" ? `<span class="small">On a door that never opens.</span><br>` : "") +
+      `<span class="small">${esc(it.evidence)}, ${(it.size[0] * 0.0254).toFixed(1)} x ${(it.size[1] * 0.0254).toFixed(1)} m${it.sides === 2 ? ", on both sides" : ""}</span><br>`;
+  }
+  if (kind === "part") return `<b>Part</b> <span class="small">something that may be used elsewhere, ${it.size.map(v => (v * 0.0254).toFixed(1)).join(" x ")} m (long, wide, high)${it.boxes.length > 1 ? ` and ${it.boxes.length - 1} extra box${it.boxes.length > 2 ? "es" : ""}` : ""}. The boxes only bound it: the part is the space inside them joined to the first one's middle, so it needn't be a box itself. Add a box for a shape one can't hold alone, such as an L-shaped room with a hallway in its corner.</span><br>` +
+    (alone && alone.id === it.id ? `<span class="small">Shown alone: ${alone.faces.toLocaleString()} faces around ${alone.m3.toLocaleString()} m³ of space.</span><br>` +
+      (alone.signs.length ? `<span class="small"><b>Holds signs</b> naming ${[...new Set(alone.signs.flatMap(s => s.places))].map(p => esc(p.replace(/-/g, " "))).join(", ")}: copied elsewhere, the part would name these places twice.</span><br>` : "") +
+      (alone.openings.length ? `<span class="small"><b>Openings</b>, where something can join it (click one to pick it, move it or size it; set its way through, or delete one that isn't):</span>` +
+        alone.openings.map((o, i) => `<div class="row small"><span class="sw" style="background:${OPENING[o.type][1]}"></span><span data-op="${i}">${openingText(o)}</span>` +
+          `<select data-way="${i}">${WAYS.map(w => `<option value="${w}"${w === o.way ? " selected" : ""}>${w}</option>`).join("")}</select><button data-drop="${i}">Delete</button></div>`).join("")
+        : `<span class="small">No openings: none found when the part was last saved, or it was marked before openings were.</span><br>`) +
+      `<button id="addop">Add an opening</button><button id="findops">Find its openings again</button>` : "");
+  if (kind === "join") return `<b>${esc(cur.name)} and ${esc(it.map)}</b> (${esc(it.kind)}${it.landmark ? ", " + esc(it.landmark) : ""})<br>` +
+    `<span class="small">Placed by the link alone, not the solved layout. ${it.agreed.length} cells agree, ${it.conflict.length} disagree (a sample of up to ${META.cube_limit}).</span><br>` +
+    `<label><input type="checkbox" id="showjoin" ${shown.has(nbKey(it)) ? "checked" : ""}> Show ${esc(it.map)} here</label>` +
+    (it.kind !== "same" ? levelChangeControls(it) : "");
+  const c = it, others = c.stretchesWith.map(i => NAMES[cur.connectors[i].way].toLowerCase()), [first, last] = wholeOf(c), limit = c.limit_m === null || c.limit_m === undefined ? 60 : c.limit_m;
+  return `<b title="${esc(c.proof.text)}">Connector</b> <span class="small">${c.length_m} m, ${c.section_m2} m²${c.rise_m > 2 ? `, climbs ${c.rise_m} m` : ""}${c.curved ? ", on a bend" : ""}${c.limit_m === null ? "" : `, limit ${Math.round(c.limit_m)} m`}${c.slab.clean ? "" : ", walls change within the box"}</span>` +
+    (others.length ? `<br>Stretches with the ${others.join(", the ")} beside it.` : "") +
+    (cur.left_out.has(c.id) ? `<br><b style="color:#ff8a8a">Doesn't part the map:</b> another way round still joins its two sides.` : "") +
+    `<div>Try it: <input type="range" id="stretch" min="${-(last - first)}" max="${Math.max(1, Math.min(60, limit))}" step="0.25" value="${stretch.m}"> <b id="stretchv">${copies(c)}</b></div>` +
+    `<div class="small">White box ${stretch.start} to ${boxEnd(c)} m, yellow ${first} to ${last} m</div>` +
+    `<button id="inside">Stand inside</button><button id="outside">See from outside</button>` +
+    `<button id="fit">Fit to walls</button><button id="parallel">Along a surface</button>${trackNear(c.line) ? `<button id="alongtrack">Along the tram line</button>` : ""}<button id="side">Side to a wall</button><button id="tie">Stretches with...</button>${c.line.stretches_with && c.line.stretches_with.length ? `<button id="untie">Untie</button>` : ""}`;
+}
+const JOINED_BY = { teleport: "a teleport (no passage)", lift: "a lift", ladder: "a ladder", ride: "a train", walk: "a walk" };  // bmab.graph.KINDS
+const levelChangeLine = it => cur.lines.find(l => l.kind === "level_change" && l.game === cur.source && l.map === it.map && l.landmark === it.landmark);
+function levelChangeControls(it) {  // what people say about a level change: it doesn't line up, or something else joins the levels
+  const l = levelChangeLine(it);
+  return `<br><label><input type="checkbox" id="loose"${l && l.loose ? " checked" : ""}> Doesn't line up: the levels disagree about where they meet, so the layout may pull them apart here</label>` +
+    `<br>Joined by: <select id="joinby"><option value="">as found: ${JOINED_BY[it.kind] || esc(it.kind)}</option>${Object.entries(JOINED_BY).map(([k, v]) => `<option value="${k}"${l && l.by === k ? " selected" : ""}>${v}</option>`).join("")}</select>`;
+}
+function openingText(o) {  // a part's opening in a line: what it is, its size, the way through and what a sign there says
+  const m = v => (v * 0.0254).toFixed(1), f = o.facing;
+  const what = o.type === "level_change" ? `Level change to ${esc(o.map)}` : OPENING[o.type][0];
+  const where = f[2] < -0.7 ? " in the floor" : f[2] > 0.7 ? " in the ceiling" : "";
+  const door = o.type === "door" ? (o.door === "shut" ? " that never opens" : "") : o.door ? ", through a door" + (o.door === "shut" ? " that never opens" : "") : "";
+  const says = o.signs.map(s => s.places.length ? s.places.map(p => esc(p.replace(/-/g, " "))).join(", ") : `"${esc(s.transcription || s.evidence)}"`);
+  return `${what}${where}${door}${o.behind === "nothing" ? ", nothing behind it" : ""}, ${m(o.size[0])} x ${m(o.size[1])} m${says.length ? `; a sign there: ${says.join("; ")}` : ""}`;
+}
+async function openingsAgain() {  // the part shown alone's openings as the redlines hold them now, and what stands in each
+  const id = alone.id, r = await fetch(`part/${keyOf(cur)}/${id}`);
+  if (!r.ok || !alone || alone.id !== id) return;
+  alone.openings = (await r.json()).openings;
+  detail(); overlay();
+}
+const openingLine = o => cur.lines.find(l => l.id === o.id);
+const placeName = p => p.replace(/-/g, " ");
+const slug = v => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function addPlace() {  // a place for the whole map
+  const p = slug($("addplace").value);
+  if (!p || (cur.places || []).some(x => x.place === p)) return;
+  store({ kind: "place", place: p }).then(saved => { if (saved) $("addplace").value = ""; });
+}
+function placesTitle() {  // the map's name, and the places its place claims name
+  const ps = [...new Set((cur.places || []).map(p => placeName(p.place)))];
+  $("mapname").textContent = `${cur.name} (${cur.game})` + (ps.length ? `, in ${ps.join(" and ")}` : "");
+}
+function wire(kind, it) {
+  if (kind === "model") {
+    const step = d => { it.at = (it.at + d + it.markers.length) % it.markers.length; look("model", it); detail(); overlay(); };
+    if ($("mprev")) $("mprev").onclick = () => step(-1);
+    if ($("mnext")) $("mnext").onclick = () => step(1);
+    $("msolo").onclick = () => { modelAlone = !modelAlone; look("model", it); detail(); overlay(); };
+    return;
+  }
+  if (kind === "part") document.querySelectorAll("#detail [data-op]").forEach(e => { e.onclick = () => { const o = cur.openings.find(x => x.id === alone.openings[+e.dataset.op].id); if (o) pick("opening", o, true); }; });
+  if (kind === "same_place") $("samechanged").onchange = e => edit({ changed: e.target.checked ? true : "" });
+  if (kind === "place") {
+    const set = v => { const p = slug(v); if (p && p !== it.place) edit({ place: p }); };
+    $("placename").onchange = e => set(e.target.value);
+    document.querySelectorAll("#detail [data-place]").forEach(e => { e.onclick = ev => { ev.preventDefault(); set(e.dataset.place); }; });
+  }
+  if (kind === "opening" && $("backpart")) $("backpart").onclick = () => { const p = cur.parts.find(x => x.id === it.part); if (p) pick("part", p, false); };
+  if (kind === "part" && alone) {
+    document.querySelectorAll("#detail [data-way]").forEach(e => { e.onchange = () => { const l = openingLine(alone.openings[+e.dataset.way]); if (l) store({ ...l, way: e.value }); }; });
+    document.querySelectorAll("#detail [data-drop]").forEach(e => { e.onclick = () => { const l = openingLine(alone.openings[+e.dataset.drop]); if (l) unstore(l); }; });
+    if ($("addop")) $("addop").onclick = () => setPlacing("opening");
+    if ($("findops")) $("findops").onclick = async () => {
+      if (!await send("POST", `openings/${keyOf(cur)}/${it.id}`)) return;
+      changed(await (await fetch("claims/" + keyOf(cur))).json(), it.id); status(); openingsAgain();
+    };
+  }
+  if ($("alone")) $("alone").onclick = () => showAlone(it);
+  if ($("type")) $("type").onchange = e => edit({ type: e.target.value });
+  if ($("style")) $("style").onchange = e => edit({ style: e.target.value });
+  if ($("refit")) $("refit").onclick = () => {  // the picked box; with more than one, square to the part, so they stay turned alike
+    const l = it.line, box = sel.box, fit = partFit(boxOf().c, it.boxes.length > 1 ? l.facing : null);
+    store(box ? { ...l, extra_boxes: l.extra_boxes.map((m, i) => i === box - 1 ? { at: fit.at, size: fit.size } : m) } : { ...l, ...fit, ...(l.extra_boxes ? { facing: l.facing } : {}) });
+  };
+  if ($("addbox")) $("addbox").onclick = () => setPlacing("partbox");
+  if ($("dropbox")) $("dropbox").onclick = () => { const l = it.line, extra = l.extra_boxes.filter((_m, i) => i !== sel.box - 1); sel.box = 0; store(extra.length ? { ...l, extra_boxes: extra } : (({ extra_boxes: _m, ...rest }) => rest)(l)); };
+  if ($("way")) $("way").onchange = e => edit({ way: e.target.value });
+  if ($("sides")) $("sides").onchange = e => edit({ sides: e.target.checked ? 2 : "" });
+  if ($("del")) $("del").onclick = () => { if (kind === "area" || confirm("Delete this?")) unstore(lineOf(sel)); };
+  if ($("notfac")) $("notfac").onclick = () => store({ kind: "area", type: META.area_kinds[it.kind].dropped ? it.kind : "unseen", at: it.at });
+  if (kind === "join" && $("showjoin")) $("showjoin").onchange = e => toggleNeighbour(nbKey(it), e.target.checked);
+  if (kind === "join" && $("loose")) {  // said in both levels' files (the server keeps the other in step)
+    const save = () => {
+      const l = levelChangeLine(it), loose = $("loose").checked, by = $("joinby").value;
+      if (!loose && !by) { if (l) unstore(l); return; }
+      const { loose: _l, by: _b, ...base } = l || { kind: "level_change", at: it.at, game: cur.source, map: it.map, landmark: it.landmark };
+      store({ ...base, ...(loose ? { loose: true } : {}), ...(by ? { by } : {}) });
+    };
+    $("loose").onchange = save; $("joinby").onchange = save;
+  }
+  if (kind !== "connector") return;
+  $("stretch").oninput = e => { stretch.m = +e.target.value; moved(); overlay(); $("stretchv").textContent = copies(it); };
+  $("inside").onclick = () => standInside(it); $("outside").onclick = () => seeOutside(it);
+  $("fit").onclick = () => { setPlacing(null); store({ ...it.line, ...connectorFrom(toLocal(it.line.at), it.line.along, it.line) }); };
+  $("parallel").onclick = () => setPlacing("parallel");
+  if ($("alongtrack")) $("alongtrack").onclick = () => { setPlacing(null); alongTrack(it.line); };
+  $("side").onclick = () => setPlacing("side");
+  $("tie").onclick = () => { tying = !tying; $("markmsg").textContent = tying ? "pick the connector it stretches with, in the list above" : ""; };
+  if ($("untie")) $("untie").onclick = () => untie(it.line);
+}
+const boxEnd = c => stretch.end === null ? stretch.start + c.slab.m : stretch.end;
+const boxMiddle = c => (stretch.start + boxEnd(c)) / 2;
+const boxLength = c => boxEnd(c) - stretch.start;
+const wholeOf = c => { const w = stretch.whole || c.whole_m || c.whole || [stretch.start, boxEnd(c)]; return [Math.min(w[0], stretch.start), Math.max(w[1], boxEnd(c))]; };
+const laid = c => { const n = Math.floor(stretch.m / boxLength(c) + 1e-6); return { n, plain: Math.max(0, stretch.m - n * boxLength(c)) }; };
+const copies = c => { if (stretch.m < 0) return `${stretch.m} m taken out`; const { n, plain } = laid(c); return `+${stretch.m} m: ${n} ${n === 1 ? "copy" : "copies"}${plain > 0.01 ? ` and ${+plain.toFixed(2)} m of plain wall` : ""}`; };
+
+// ---------- placing ----------
+const ADJUSTING = ["parallel", "side", "partbox"];  // these work on what is selected: its handles stay in view
+const SAYS = { opening: "click the wall, floor or ceiling where something could join the part (Esc: cancel)", part: "click the floor of the room (Esc: cancel)", partbox: "click the floor where the part goes on (Esc: cancel)", fake_door: "click a wall (Esc: cancel)", ought_door: "click the wall it ought to be in (Esc: cancel)", connector: "click in the passage (Esc: cancel)", fake_out: "click the wall it ends at, or the floor of the passage (Esc: cancel)",
+               parallel: "click the wall, or the sloped floor or ceiling, to run along (Esc: cancel)", side: "click a wall it should reach (Esc: cancel)" };
+function setPlacing(mode) {
+  placing = mode && cur ? mode : null;
+  ghost = null; tying = false;
+  $("markmsg").textContent = placing ? SAYS[placing] || "click a surface (Esc: cancel)" : "";
+  V.onClick = placing ? place : null;
+  V.onHover = hover;
+  document.querySelectorAll(".slot").forEach(el => el.classList.toggle("on", el.dataset.mode === placing));
+  overlay();
+}
+function markerAt(x, y) {  // the model marker within a few pixels of a point on the screen, or -1
+  let best = -1, gap = 9;
+  cur.props.forEach(([px, py, pz], i) => { const s = V.project([px, py, pz]); if (s) { const d = Math.hypot(s[0] - x, s[1] - y); if (d < gap) { gap = d; best = i; } } });
+  return best;
+}
+function pickMarker(i) {
+  modelList();
+  const it = cur.models.find(m => m.markers.includes(i));
+  it.at = it.markers.indexOf(i); modelAlone = true; pick("model", it, true);
+}
+let hovered = 0, hot = null;  // hot: the handle under the mouse
+function hover(x, y) {
+  if (performance.now() - hovered < 60) return;
+  hovered = performance.now();
+  if (placing) {
+    const h = V.hit(x, y);
+    ghost = h ? preview(placing, h) : null;
+    $("markmsg").textContent = (SAYS[placing] || "click a surface (Esc: cancel)") + (ghost && ghost.says ? ": " + ghost.says : "");
+    return overlay();
+  }
+  const k = knobAt(x, y), id = k ? k.id : null;
+  $("c").style.cursor = k ? "grab" : thingAt(x, y) ? "pointer" : "";
+  if ($("modelview").value === "markers") {
+    const best = markerAt(x, y);
+    $("markmsg").textContent = best >= 0 ? cur.prop_names[cur.props[best][3]] + " (click: show it alone)" : "";
+  }
+  if (id !== hot) { hot = id; overlay(); }
+}
+function place(x, y) {
+  const h = V.hit(x, y), g = h ? preview(placing, h) : null;
+  if (!g) return;
+  if (g.why) { $("markmsg").textContent = g.why; return; }
+  setPlacing(null);
+  if (g.apply) return g.apply();
+  const kind = itemKind(g.claim.kind);
+  store(g.claim).then(saved => { if (saved) { pick(kind, items(kind).find(x => x.id === saved.id), false); } });
+}
+const itemKind = k => k === "fake_door" || k === "ought_door" ? "door" : k;  // what the page lists a claim of a kind as
+const ringPairs = r => r.flatMap((p, k) => [...p, ...r[(k + 1) % 4]]);
+const cornersOf = (q, u, v, hu, hv) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => v3.add(q, v3.add(v3.mul(u, a * hu), v3.mul(v, b * hv))));
+function axesOf(t) {  // across a direction, as a connector's outline is measured
+  const u = v3.unit(v3.cross(t, Math.abs(t[2]) < 0.7 ? [0, 0, 1] : [1, 0, 0]));
+  return [u, v3.cross(u, t)];
+}
+function frame(p, t, l) {  // the walls around p (local units) across direction t: where the middle is and how far they are. l: the claim being refitted, whose outline says how far its walls can be
+  const [u, v] = axesOf(t), was = l ? outlineOf(l).half.map(h => h * cur.per_metre) : [64 / cur.quant, 64 / cur.quant], reach = l ? Math.max(2 * Math.max(...was), 8 * cur.per_metre) : 6000 / cur.quant;
+  const wall = (q, d) => { const h = V.cast(q, d, reach); return h ? h.t : null; };
+  const across = (q, a, half) => {  // a side with no wall in reach is open: the middle stays where it is on this axis
+    const x = wall(q, a), y = wall(q, v3.mul(a, -1));
+    return x === null || y === null ? [0, x === null ? (y === null ? half : y) : x] : [(x - y) / 2, (x + y) / 2];
+  };
+  let q = p, hu = was[0], hv = was[1];
+  for (let k = 0; k < 2; k++) {
+    const [du, a] = across(q, u, hu), [dv, b] = across(q, v, hv);
+    q = v3.add(q, v3.add(v3.mul(u, du), v3.mul(v, dv)));
+    hu = a; hv = b;
+  }
+  return { q, u, v, hu, hv };
+}
+function connectorFrom(p, t, l) {  // a line along t through p (local units), fitted to the walls around it: a connector's shape
+  const f = frame(p, t, l), back = clearance(f.q, v3.mul(t, -1)), ahead = clearance(f.q, t);
+  return { at: toMap(f.q), along: t, outline: cornersOf(f.q, f.u, f.v, f.hu, f.hv).map(toMap), path: [toMap(v3.sub(f.q, v3.mul(t, back))), toMap(v3.add(f.q, v3.mul(t, ahead)))] };
+}
+const rounded = d => d.map(x => +x.toFixed(3) + 0);
+const dirFrom = (yaw, pitch) => rounded([Math.cos(pitch) * Math.cos(yaw), Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch)]);
+const yawOf = t => Math.atan2(t[1], t[0]), pitchOf = t => Math.asin(Math.max(-1, Math.min(1, t[2])));
+function snappedDir(d) {  // a surface's own direction, tidied only when it is within a degree of 22.5 degree steps: most angled passages lie between them
+  const step = Math.PI / 8, near = a => { const s = Math.round(a / step) * step; return Math.abs(s - a) < Math.PI / 180 ? s : a; };
+  return dirFrom(near(yawOf(d)), near(pitchOf(d)));
+}
+function tunnelAt(p) {  // which way the passage around p runs: the longest clear line for its width
+  let best = null;
+  const through = t => clearance(p, t) + clearance(p, v3.mul(t, -1));
+  for (let k = 0; k < 8; k++) {
+    const t = dirFrom(k * Math.PI / 8, 0), score = through(t) / Math.max(through([-t[1], t[0], 0]), 1e-3);
+    if (!best || score > best.score) best = { t, score };
+  }
+  const score = through([0, 0, 1]) / Math.max(through([1, 0, 0]), through([0, 1, 0]), 1e-3);
+  return score > best.score ? [0, 0, 1] : best.t;
+}
+const FIT = { reach: 96, high: 192, step: 4, front: 32, tol: 1.5, usual: [64, 104] };  // units: how far either side of a click and how high a door's edges are looked for, the step, where the rays start in front of the wall, how far the depth may vary on one surface, and a door's size when no edge is found
+function doorFloor(p, n) {  // the floor under a door clicked at p (local), or, when there is none within a door's height (a door above a drop), where its bottom would be if p were its middle
+  const drop = clearance(v3.add(p, v3.mul(n, 8 / cur.quant)), [0, 0, -1]);
+  return drop <= FIT.high / cur.quant ? p[2] - drop : p[2] - FIT.usual[1] / 2 / cur.quant;
+}
+function doorFit(p, n) {  // the door a click on a wall stands for (local units; n: the wall's level normal): {c, width, height} in units, or null if nothing there is door-shaped
+  const q = cur.quant, step = FIT.step / q, front = FIT.front / q, into = v3.mul(n, -1), u = [-n[1], n[0], 0], floor = doorFloor(p, n);
+  const depthAt = (along, z) => { const h = V.cast([p[0] + u[0] * along + n[0] * front, p[1] + u[1] * along + n[1] * front, z], into, 3 * front); return h ? h.t : Infinity; };
+  const nu = Math.round(FIT.reach / FIT.step), nv = Math.round(FIT.high / FIT.step), w = 2 * nu + 1, depth = new Float32Array(w * nv);
+  const along = i => (i - nu) * step, height = j => floor + (j + 0.5) * step;
+  for (let j = 0; j < nv; j++) for (let i = 0; i < w; i++) depth[j * w + i] = depthAt(along(i), height(j));
+  const start = Math.max(0, Math.min(nv - 1, Math.floor((p[2] - floor) / step))) * w + nu, d0 = depth[start], tol = FIT.tol / q;
+  if (!isFinite(d0)) return null;
+  const grow = (k0, test, seen) => {  // the cells joined to k0 that pass test: their extent, and whether they reach the sides or the top of what was sampled
+    const todo = [k0], out = { left: k0 % w, right: k0 % w, top: 0, bottom: nv, open: false, k: k0 };
+    seen[k0] = 1;
+    while (todo.length) {
+      const k = todo.pop(), j = Math.floor(k / w), i = k % w;
+      if (i === 0 || i === w - 1 || j === nv - 1) out.open = true;
+      out.left = Math.min(out.left, i); out.right = Math.max(out.right, i); out.top = Math.max(out.top, j); out.bottom = Math.min(out.bottom, j);
+      for (const kk of [k - 1, k + 1, k + w, k - w]) if (kk >= 0 && kk < w * nv && !seen[kk] && Math.abs(kk % w - k % w) <= 1 && test(depth[kk])) { seen[kk] = 1; todo.push(kk); }
+    }
+    return out;
+  };
+  const fitted = (g, test) => {  // a region's edges, each found between the last sample in it and the first out of it
+    const rowOf = i => { for (let j = g.bottom; j <= g.top; j++) if (test(depth[j * w + i])) return j; return g.bottom; }, columnOf = j => { for (let i = g.left; i <= g.right; i++) if (test(depth[j * w + i])) return i; return nu; };
+    const edge = (inside, outside, at) => { for (let k = 0; k < 4; k++) { const m = (inside + outside) / 2; if (test(at(m))) inside = m; else outside = m; } return (inside + outside) / 2; };
+    const l = edge(along(g.left), along(g.left - 1), a => depthAt(a, height(rowOf(g.left)))), r = edge(along(g.right), along(g.right + 1), a => depthAt(a, height(rowOf(g.right))));
+    const t = edge(height(g.top), height(g.top + 1), z => depthAt(along(columnOf(g.top)), z)), width = Math.round((r - l) * q), tall = Math.round((t - floor) * q), mid = (l + r) / 2;
+    return width < 24 || tall < 48 ? null : { c: [p[0] + u[0] * mid + n[0] * (front - d0), p[1] + u[1] * mid + n[1] * (front - d0), floor + tall / 2 / q], width, height: tall };
+  };
+  const flush = d => Math.abs(d - d0) <= tol, panel = grow(start, flush, new Uint8Array(w * nv));
+  if (!panel.open) return fitted(panel, flush);  // the surface clicked is bounded: a door in a recess or behind a frame
+  const deeper = d => d > d0 + 8 / q, seen = new Uint8Array(w * nv), holes = [];  // it runs on: an opening in it nearby, where a model door stands (the page draws none) or nothing does
+  for (let k = 0; k < w * 2; k++) if (!seen[k] && deeper(depth[k])) { const g = grow(k, deeper, seen); if (!g.open && g.bottom <= 1) holes.push(g); }
+  const best = holes.map(g => ({ g, gap: Math.abs((g.left + g.right) / 2 - nu) })).sort((a, b) => a.gap - b.gap)[0];
+  return best ? fitted(best.g, deeper) : null;
+}
+function sameBehind(claim) {  // whether the far side of the wall has an opening that fits the same door
+  const t = throughWall(claim.at, claim.back);
+  if (t === null) return false;
+  const f = doorFit(toLocal(claim.at.map((v, i) => v + claim.back[i] * t)), claim.back), c = f ? toMap(f.c) : null, side = [-claim.back[1], claim.back[0], 0];
+  return !!f && Math.abs(f.width - claim.width) <= 16 && Math.abs(f.height - claim.height) <= 16 && Math.abs(v3.dot(v3.sub(c, claim.at), side)) <= 16;
+}
+function markedBehind(claim) {  // a door already claimed whose far side this is: facing the other way, within a wall's thickness, covering the same spot
+  return cur.doors.find(d => {
+    if (v3.dot(d.back, claim.back) > -0.99) return false;
+    const gap = v3.sub(claim.at, d.at), depth = v3.dot(gap, d.back), side = [-d.back[1], d.back[0], 0];
+    return depth > -8 && depth <= THROUGH && Math.abs(v3.dot(gap, side)) < d.width / 2 && Math.abs(gap[2]) < d.height / 2;
+  });
+}
+const doorPairs = d => { const q = d.corners, f = d.far, out = []; for (let i = 0; i < 4; i++) { out.push(...q[i], ...q[(i + 1) % 4]); if (f) out.push(...f[i], ...f[(i + 1) % 4], ...q[i], ...f[i]); } out.push(...d.c, ...d.tip); return out; };
+function preview(mode, h) {  // what a click on this surface would do: {claim or apply, pairs to draw}, or {why not}
+  const n = h.normal, wall = Math.abs(n[2]) < 0.5, per = cur.per_metre;
+  if (mode === "fake_door" || mode === "ought_door") {
+    if (!wall) return { why: "a door goes on a wall: click a wall (Esc: cancel)" };
+    const flat = Math.hypot(n[0], n[1]), level = [n[0] / flat, n[1] / flat, 0], fit = doorFit(h.point, level);
+    const [width, height] = fit ? [fit.width, fit.height] : FIT.usual, c = fit ? fit.c : [h.point[0], h.point[1], doorFloor(h.point, level) + height / 2 / cur.quant];
+    const back = rounded(v3.mul(level, -1)), claim = { kind: mode, at: toMap(c), back, width, height };
+    const marked = markedBehind(claim);
+    if (marked) return { apply: () => { store({ ...marked.line, sides: 2 }).then(saved => { if (saved) pick("door", cur.doors.find(x => x.id === saved.id), false); }); }, pairs: doorPairs({ ...marked, far: doorItem({ ...marked.line, sides: 2 }).far }), says: "the door already marked from the other side: it becomes one door on both sides" };
+    const both = fit && sameBehind(claim);
+    if (both) claim.sides = 2;
+    return { claim, pairs: doorPairs(doorItem(claim)), says: (fit ? `fitted to the opening, ${(width * 0.0254).toFixed(1)} x ${(height * 0.0254).toFixed(1)} m` : "no edge found around it: the usual size") + (both ? ", and the same door shows on the other side" : "") };
+  }
+  if (mode === "part") {
+    const claim = { kind: "part", ...partFit(v3.add(h.point, v3.mul(n, 24 / cur.quant))) };
+    return { claim, pairs: boxPairs(partCorners(claim)), says: `fitted to the room, ${claim.size.map(v => (v * 0.0254).toFixed(1)).join(" x ")} m (its look is guessed once placed)` };
+  }
+  if (mode === "connector") {
+    const p = v3.add(h.point, v3.mul(n, 24 / cur.quant)), claim = { kind: "connector", ...connectorFrom(p, tunnelAt(p)) };
+    return { claim, pairs: [...ringPairs(claim.outline.map(toLocal)), ...claim.path.flatMap(toLocal)], says: "its way through is guessed once placed" };
+  }
+  if (mode === "fake_out") {
+    let p, dir;
+    if (wall) {
+      dir = snappedDir(v3.mul(n, -1));
+      p = h.point;
+    } else {
+      const off = v3.add(h.point, v3.mul(n, 24 / cur.quant)), look = v3.sub(V.cam.target, V.ray(innerWidth / 2, innerHeight / 2).eye);
+      dir = tunnelAt(off);
+      if (v3.dot(dir, look) < 0) dir = v3.mul(dir, -1);
+      const f = frame(off, dir);
+      p = v3.add(f.q, v3.mul(dir, clearance(f.q, dir)));
+    }
+    const tip = v3.add(p, v3.mul(dir, 160 / cur.quant));
+    return { claim: { kind: "fake_out", type: "leads_on", at: toMap(p), reaches: toMap(tip), seen_from: toMap(V.ray(0, 0).eye) }, pairs: [...p, ...tip], surface: [p, dir] };
+  }
+  if (mode === "opening") {  // an opening of the part shown alone where the click is, square to the part: in a wall the doorway there, as a door is fitted
+    const part = alone && cur.parts.find(p => p.id === alone.id);
+    if (!part) return null;
+    const axes = partAxes(part.facing), out = v3.mul(n, -1), k = nearestAxis(out, axes), facing = rounded(v3.mul(axes[k], Math.sign(v3.dot(out, axes[k])) || 1));
+    let c = h.point, size = [64, 64], says = "the usual size: drag its edges to fit";
+    if (k < 2) {
+      const level = v3.mul(facing, -1), fit = doorFit(h.point, level);
+      size = fit ? [fit.width, fit.height] : FIT.usual;
+      c = fit ? fit.c : [h.point[0], h.point[1], doorFloor(h.point, level) + size[1] / 2 / cur.quant];
+      if (fit) says = `fitted to the opening, ${(size[0] * 0.0254).toFixed(1)} x ${(size[1] * 0.0254).toFixed(1)} m`;
+    }
+    const claim = { kind: "opening", part: part.id, at: toMap(c), facing, size };
+    return { apply: () => store(claim).then(saved => { if (saved) pick("opening", cur.openings.find(o => o.id === saved.id), false); }), pairs: openingPairs(claim), says: says + " (its way through is guessed once placed)" };
+  }
+  if (mode === "partbox") {  // an extra box for the picked part, fitted to the room where clicked, square to the part
+    if (!sel || sel.kind !== "part") return null;
+    const l = sel.item.line, fit = partFit(v3.add(h.point, v3.mul(n, 24 / cur.quant)), l.facing), claim = { ...l, extra_boxes: [...(l.extra_boxes || []), { at: fit.at, size: fit.size }] };
+    return { apply: () => store(claim).then(saved => { if (saved) pick("part", cur.parts.find(x => x.id === saved.id), false, saved.extra_boxes.length); }), pairs: boxPairs(partCorners({ ...fit, facing: l.facing })), says: `${fit.size.map(v => (v * 0.0254).toFixed(1)).join(" x ")} m` };
+  }
+  if (mode === "parallel" || mode === "side") {
+    if (!sel || sel.kind !== "connector") return null;
+    const c = sel.item, l = c.line;
+    if (mode === "parallel") {
+      let run = wall ? rounded(v3.unit(v3.cross(n, [0, 0, 1]))) : rounded(v3.unit(v3.sub(l.along, v3.mul(n, v3.dot(l.along, n)))));  // a floor or ceiling gives its slope, the way the connector already runs
+      if (v3.dot(run, l.along) < 0) run = rounded(v3.mul(run, -1));
+      const fields = connectorFrom(toLocal(l.at), snappedDir(run), l);
+      return { apply: () => store({ ...l, ...fields }), pairs: ringPairs(fields.outline.map(toLocal)) };
+    }
+    const [u, v] = c.axes, on = Math.abs(v3.dot(n, u)) >= Math.abs(v3.dot(n, v)) ? 0 : 1, a = on ? v : u, h0 = c.half[on] * per, d = v3.dot(v3.sub(h.point, c.middle_local), a);
+    const [lo, hi] = d > 0 ? [-h0, d] : [d, h0], q = v3.add(c.middle_local, v3.mul(a, (lo + hi) / 2)), hs = [c.half[0] * per, c.half[1] * per];
+    hs[on] = (hi - lo) / 2;
+    const ring = cornersOf(q, u, v, hs[0], hs[1]);
+    return { apply: () => store({ ...l, at: toMap(q), outline: ring.map(toMap) }), pairs: ringPairs(ring) };
+  }
+}
+function trackNear(l) {  // the piece of the map's own tram line nearest a connector, as its direction, or null: the game says exactly how it slopes
+  const p = toLocal(l.at);
+  let best = null, gap = 300 / cur.quant;
+  for (const [x0, y0, z0, x1, y1, z1] of cur.tracks) {
+    const a = [x0, y0, z0], d = v3.sub([x1, y1, z1], a), len2 = v3.dot(d, d);
+    if (!len2) continue;
+    const s = Math.max(0, Math.min(1, v3.dot(v3.sub(p, a), d) / len2)), g = v3.len(v3.sub(v3.add(a, v3.mul(d, s)), p));
+    if (g < gap) { gap = g; best = v3.unit(d); }
+  }
+  return best;
+}
+function alongTrack(l) {
+  const t = trackNear(l), dir = rounded(v3.dot(t, l.along) < 0 ? v3.mul(t, -1) : t);
+  store({ ...l, ...connectorFrom(toLocal(l.at), dir, l) });
+}
+async function tie(a, b) {  // every connector of the group lists the others
+  const group = [...new Set([...(a.stretches_with || []), ...(b.stretches_with || []), a.id, b.id])];
+  for (const id of group) await store({ ...cur.lines.find(x => x.id === id), stretches_with: group.filter(x => x !== id) });
+}
+async function untie(l) {
+  for (const id of [...(l.stretches_with || []), l.id]) {
+    const { stretches_with: was, ...rest } = cur.lines.find(x => x.id === id), left = (was || []).filter(x => x !== l.id);
+    await store(id === l.id || !left.length ? rest : { ...rest, stretches_with: left });
+  }
+}
+
+// ---------- handles ----------
+function gizmo() {  // the handles of what is picked: knobs to grab, and the lines showing them
+  knobs = [];
+  if (!sel || (placing && !ADJUSTING.includes(placing)) || !V.cam || !["connector", "door", "fake_out", "part", "opening", "same_place"].includes(sel.kind)) return [];
+  const { kind, item: it } = sel, pivot = kind === "connector" ? v3.add(it.middle_local, v3.mul(it.along, boxMiddle(it) * cur.per_metre)) : it.c, seen = V.flying ? v3.len(v3.sub(pivot, V.ray(0, 0).eye)) : V.cam.dist, R = seen * 0.14, RING = R * 1.3, lines = [], size = seen * 0.012;  // the same size on screen however far it is
+  const knob = (id, at, colour, data) => knobs.push({ id, at, colour, ...data });
+  const axes = p => [["x", [1, 0, 0]], ["y", [0, 1, 0]], ["z", [0, 0, 1]]].forEach(([id, axis]) => { const tip = v3.add(p, v3.mul(axis, R)); knob(id, tip, id, { type: "move", axis, pivot: p, line: [v3.add(p, v3.mul(axis, R * 0.15)), tip] }); lines.push({ pairs: [...p, ...tip], colour: COL_KNOB[id] }); });
+  const loop = (p, a, b, r, colour) => { const pts = [], pairs = []; for (let k = 0; k <= 40; k++) pts.push(v3.add(p, v3.add(v3.mul(a, r * Math.cos(k * Math.PI / 20)), v3.mul(b, r * Math.sin(k * Math.PI / 20))))); for (let k = 0; k < 40; k++) pairs.push(...pts[k], ...pts[k + 1]); lines.push({ pairs, colour: COL_KNOB[colour] }); return pts; };
+  const rings = (p, t, tilts = true) => {  // tilts false: only turning, for what stays upright
+    const yaw = yawOf(t), hor = [Math.cos(yaw), Math.sin(yaw), 0], z = [0, 0, 1], side = v3.cross(hor, z);
+    const flat = loop(p, hor, side, RING, "turn"), upright = tilts ? loop(p, hor, z, RING, "tilt") : null;
+    const off = Math.PI / 6, on = (a, b, r, w) => v3.add(p, v3.add(v3.mul(a, r * Math.cos(w)), v3.mul(b, r * Math.sin(w))));  // to the side of the arrows
+    knob("turn", on(hor, side, RING, -off), "turn", { type: "turn", pivot: p, normal: z, line: flat });
+    if (tilts) knob("tilt", on(hor, z, RING, pitchOf(t) + off), "tilt", { type: "tilt", pivot: p, normal: side, hor, line: upright });
+  };
+  if (kind === "connector") {
+    const u = cur.per_metre, m = it.middle_local, t = it.along, at = s => v3.add(m, v3.mul(t, s * u)), [a, b] = axesOf(t), head = R * 0.22;
+    const arrow = (id, s, way, colour, length) => {  // longer than the arrows that move it, so that the tips never land on one another
+      const base = at(s), dir = v3.mul(t, way), tip = v3.add(base, v3.mul(dir, R * length)), barb = (w, n) => v3.add(tip, v3.add(v3.mul(dir, -head), v3.mul(w, n * head * 0.5)));
+      lines.push({ pairs: [...base, ...tip, ...tip, ...barb(a, 1), ...tip, ...barb(a, -1), ...tip, ...barb(b, 1), ...tip, ...barb(b, -1)], colour: COL_KNOB[colour] });
+      knob(id, tip, colour, { type: id, axis: t, pivot: m, line: [base, tip] });
+    };
+    const [first, last] = wholeOf(it);
+    arrow("start", stretch.start, -1, "box", 1.2); arrow("end", boxEnd(it), 1, "box", 1.2);
+    arrow("wstart", first, -1, "whole", 1.7); arrow("wend", last, 1, "whole", 1.7);
+    const middle = at(boxMiddle(it));
+    axes(middle); rings(middle, t);
+  } else if (kind === "door") {
+    const side = [-it.back[1], it.back[0], 0], c = it.c;
+    knob("along", c, "end", { type: "along", axis: side, pivot: c });
+    knob("width", v3.add(c, v3.mul(side, it.width / 2 / cur.quant)), "x", { type: "width", axis: side, pivot: c });
+    knob("height", v3.add(c, [0, 0, it.height / 2 / cur.quant]), "z", { type: "height", axis: [0, 0, 1], pivot: c });
+  } else if (kind === "part") {
+    const f = it.facing, s = [-f[1], f[0], 0], box = boxOf(), c = box.c, half = box.size.map(v => v / 2 / cur.quant);
+    axes(c); if (!sel.box) rings(c, f, false);
+    [[f, 0, "end"], [s, 1, "x"], [[0, 0, 1], 2, "z"]].forEach(([a, dim, colour]) => [1, -1].forEach(sign => {  // a handle on every side, moving only that side
+      const out = v3.mul(a, sign), at = v3.add(c, v3.mul(out, half[dim]));
+      knob(`side${dim}${sign}`, at, colour, { type: "side", axis: out, dim, pivot: c, line: [c, at] });
+    }));
+  } else if (kind === "same_place") {
+    axes(it.c);
+  } else if (kind === "opening") {
+    const c = it.c;
+    [[it.u, "x"], [it.w, "z"], [it.facing, "end"]].forEach(([a, colour], k) => {
+      const tip = v3.add(c, v3.mul(a, R));
+      knob(`move${k}`, tip, colour, { type: "move", axis: a, pivot: c, line: [v3.add(c, v3.mul(a, R * 0.15)), tip] }); lines.push({ pairs: [...c, ...tip], colour: COL_KNOB[colour] });
+    });
+    [[it.u, 0], [it.w, 1]].forEach(([a, dim]) => [1, -1].forEach(sign => {
+      const out = v3.mul(a, sign), at = v3.add(c, v3.mul(out, it.size[dim] / 2 / cur.quant));
+      knob(`side${dim}${sign}`, at, "box", { type: "side", axis: out, dim, pivot: c, line: [c, at] });
+    }));
+  } else {
+    axes(it.c); rings(it.c, v3.unit(v3.sub(it.to, it.c)));
+  }
+  const sets = {};
+  for (const k of knobs) { const s = k.normal ? size * 1.4 : size; (sets[k.colour] = sets[k.colour] || []).push(...v3.sub(k.at, [s, 0, 0]), ...v3.add(k.at, [s, 0, 0]), ...v3.sub(k.at, [0, s, 0]), ...v3.add(k.at, [0, s, 0]), ...v3.sub(k.at, [0, 0, s]), ...v3.add(k.at, [0, 0, s])); }
+  const shown = [...lines, ...Object.entries(sets).map(([c, pairs]) => ({ pairs, colour: COL_KNOB[c] }))].map(l => ({ ...l, width: 3.5 })), lit = knobs.find(k => k.id === hot);
+  if (lit && lit.line) { const pairs = []; lit.line.forEach((p, i) => { if (i) pairs.push(...lit.line[i - 1], ...p); }); shown.push({ pairs, colour: [1, 1, 1, 1], width: 6 }); }
+  return shown;
+}
+function nearLine(x, y, pts) {  // CSS pixels from the mouse to a line of 3D points; what is behind the camera doesn't count
+  let best = Infinity, last = null;
+  const onScreen = (a, b) => { for (let t = 0.5, s = 0.25, seen = null; s > 1e-3; s /= 2) { const q = V.project(v3.add(a, v3.mul(v3.sub(b, a), t))); if (q) { seen = q; t -= s; } else t += s; if (s < 2e-3) return seen; } return null; };
+  for (let i = 0; i < pts.length; i++) {
+    const s = V.project(pts[i]);
+    if (i && (s || last)) {
+      const p = s || onScreen(pts[i - 1], pts[i]), q = last || onScreen(pts[i], pts[i - 1]);
+      if (p && q) { const e = [p[0] - q[0], p[1] - q[1]], t = Math.max(0, Math.min(1, ((x - q[0]) * e[0] + (y - q[1]) * e[1]) / ((e[0] * e[0] + e[1] * e[1]) || 1))); best = Math.min(best, Math.hypot(q[0] + e[0] * t - x, q[1] + e[1] * t - y)); }
+    } else if (pts.length === 1 && s) best = Math.hypot(s[0] - x, s[1] - y);
+    last = s;
+  }
+  return best;
+}
+function knobAt(x, y) {  // the handle under the mouse: anywhere along an arrow or around a ring
+  let best = null, bestD = 10;
+  for (const k of knobs) {  // handles on one line: the one whose tip is nearer
+    const s = V.project(k.at), d = nearLine(x, y, k.line || [k.at]) + (s ? Math.hypot(s[0] - x, s[1] - y) * 0.01 : 0);
+    if (d < bestD) { best = k; bestD = d; }
+  }
+  return best;
+}
+function thingAt(x, y) {  // what is drawn on the map under the mouse, and can be picked: {kind, item} or null
+  if (!cur) return null;
+  let best = null, bestD = 8;
+  const test = (kind, item, lines, box = 0) => { for (const l of lines) { const d = nearLine(x, y, l); if (d < bestD) { best = { kind, item, box }; bestD = d; } } };
+  if ($("connectors").checked) for (const c of cur.connectors) test("connector", c, [c.path, [...c.outline, c.outline[0]]]);
+  if ($("doors").checked) for (const d of cur.doors) test("door", d, [[...d.corners, d.corners[0]], [d.c, d.tip]]);
+  if ($("fake_outs").checked) for (const h of items("fake_out")) test("fake_out", h, [[h.c, h.to]]);
+  if ($("signs").checked) for (const s of cur.signs || []) test("sign", s, [[...s.corners, s.corners[0]]]);
+  if (alone) for (const o of cur.openings) if (o.part === alone.id) test("opening", o, [[...o.corners, o.corners[0]], [o.c, o.tip]]);
+  if ($("parts").checked) for (const pt of cur.parts) pt.boxes.forEach(({ corners: q }, k) => test("part", pt, [[q[0], q[1], q[2], q[3], q[0]], [q[4], q[5], q[6], q[7], q[4]], [q[0], q[4]], [q[1], q[5]], [q[2], q[6]], [q[3], q[7]]], k));
+  return best;
+}
+function alongAxis(x, y, p, a) {  // how far along a line through p the mouse is, in local units
+  const { eye, d } = V.ray(x, y), w = v3.sub(p, eye), b = v3.dot(a, d), den = 1 - b * b;
+  return den < 1e-6 ? 0 : (b * v3.dot(d, w) - v3.dot(a, w)) / den;
+}
+const LENGTHS = ["start", "end", "wstart", "wend"];
+function ringAngle(x, y, k) {  // where the mouse is around a ring, or null when the ring is seen edge on
+  const { eye, d: ray } = V.ray(x, y), along = v3.dot(ray, k.normal);
+  if (Math.abs(along) < 1e-4) return null;
+  const rel = v3.sub(v3.add(eye, v3.mul(ray, v3.dot(v3.sub(k.pivot, eye), k.normal) / along)), k.pivot);
+  return k.type === "turn" ? Math.atan2(rel[1], rel[0]) : Math.atan2(rel[2], v3.dot(rel, k.hor));
+}
+function grab(x, y) {
+  if (placing) return false;
+  const best = knobAt(x, y);
+  if (!best) return false;
+  held = { angle: best.normal ? ringAngle(x, y, best) || 0 : 0, k: best, base: JSON.parse(JSON.stringify(lineOf(sel))), from: best.axis ? alongAxis(x, y, best.pivot, best.axis) : 0, was: LENGTHS.includes(best.type) ? { start: stretch.start, end: boxEnd(sel.item), wstart: wholeOf(sel.item)[0], wend: wholeOf(sel.item)[1] }[best.type] : 0, draft: null };
+  if (stretch.m) { stretch.m = 0; moved(); }
+  return true;
+}
+const roundTo = (v, step) => Math.round(v / step) * step;
+function shifted(l, by) {  // a claim moved by a vector, units
+  const go = p => p.map((v, a) => v + by[a]), out = { ...l, at: go(l.at) };
+  for (const f of ["reaches", "seen_from"]) if (l[f]) out[f] = go(l[f]);
+  if (l.outline) { out.outline = l.outline.map(go); out.path = l.path.map(go); }
+  return out;
+}
+function turned(l, dir, mid) {  // a claim pointing another way: a fake out or a part about its own position, a connector about the point mid metres along it
+  if (l.kind === "part") {  // its extra boxes turn with it, about the first one's middle
+    const f = rounded(v3.unit([dir[0], dir[1], 0])), a = Math.atan2(f[1], f[0]) - Math.atan2(l.facing[1], l.facing[0]), cs = Math.cos(a), sn = Math.sin(a);
+    const spin = q => { const dx = q[0] - l.at[0], dy = q[1] - l.at[1]; return [Math.round(l.at[0] + dx * cs - dy * sn), Math.round(l.at[1] + dx * sn + dy * cs), q[2]]; };
+    return { ...l, facing: f, ...(l.extra_boxes ? { extra_boxes: l.extra_boxes.map(m => ({ ...m, at: spin(m.at) })) } : {}) };
+  }
+  if (l.kind === "fake_out") return { ...l, reaches: l.at.map((v, a) => Math.round(v + dir[a] * 160)) };
+  const a = toLocal(l.outline[0]), b = toLocal(l.outline[1]), c = toLocal(l.outline[3]), hu = v3.len(v3.sub(b, a)) / 2, hv = v3.len(v3.sub(c, a)) / 2, pivot = v3.add(toLocal(l.at), v3.mul(l.along, mid * cur.per_metre)), q = v3.sub(pivot, v3.mul(dir, mid * cur.per_metre)), [u, v] = axesOf(dir), half = l.length_m / 2 * cur.per_metre;
+  return { ...l, at: toMap(q), along: dir, outline: cornersOf(q, u, v, hu, hv).map(toMap), path: [toMap(v3.sub(q, v3.mul(dir, half))), toMap(v3.add(q, v3.mul(dir, half)))] };
+}
+function dragTo(x, y, fine, finest) {
+  const { k, base: whole } = held, c = sel.item, step = (finest ? 1 : fine ? 22.5 : 45) * Math.PI / 180;
+  if (LENGTHS.includes(k.type)) {
+    const v = roundTo(held.was + (alongAxis(x, y, k.pivot, k.axis) - held.from) / cur.per_metre, 0.25), w = [...wholeOf(c)];
+    if (k.type === "start") { const e = boxEnd(c); stretch.start = v; stretch.end = Math.max(e, v + 0.5); }
+    else if (k.type === "end") stretch.end = Math.max(v, stretch.start + 0.5);
+    else { w[k.type === "wstart" ? 0 : 1] = v; stretch.whole = w; }
+    held.moved = true;
+    return overlay();
+  }
+  const kb = sel.kind === "part" ? sel.box : 0, base = kb ? { ...whole, at: whole.extra_boxes[kb - 1].at, size: whole.extra_boxes[kb - 1].size } : whole;  // an extra box: moved and sized as the part's own
+  let d = base;
+  if (k.type === "move") d = shifted(base, v3.mul(k.axis, roundTo((alongAxis(x, y, k.pivot, k.axis) - held.from) * cur.quant, 8)));
+  if (k.type === "along") d = shifted(base, v3.mul(k.axis, roundTo((alongAxis(x, y, k.pivot, k.axis) - held.from) * cur.quant, 4)));
+  if (k.type === "width") d = { ...base, width: Math.max(16, roundTo(2 * Math.abs(alongAxis(x, y, k.pivot, k.axis)) * cur.quant, 4)) };
+  if (k.type === "height") {
+    const bottom = base.at[2] - base.height / 2, height = Math.max(32, roundTo(base.at[2] + alongAxis(x, y, k.pivot, k.axis) * cur.quant - bottom, 4));
+    d = { ...base, height, at: [base.at[0], base.at[1], bottom + height / 2] };
+  }
+  if (k.type === "side") {  // one side of a part's box: the side across from it stays where it is
+    const half = base.size[k.dim] / 2, to = Math.max(32 - half, roundTo(alongAxis(x, y, k.pivot, k.axis) * cur.quant, 8)), size = [...base.size], shift = v3.mul(k.axis, (to - half) / 2);
+    size[k.dim] = Math.round(to + half);
+    d = { ...base, size, at: base.at.map((v, a) => Math.round(v + shift[a])) };
+  }
+  if (k.type === "turn" || k.type === "tilt") {
+    const now = ringAngle(x, y, k);
+    if (now === null) return;
+    const old = base.along || base.facing || v3.unit(v3.sub(base.reaches, base.at)), spun = Math.atan2(Math.sin(now - held.angle), Math.cos(now - held.angle));  // by how far it has been dragged, wherever on the ring it was grabbed
+    d = turned(base, k.type === "turn" ? dirFrom(roundTo(yawOf(old) + spun, step), pitchOf(old)) : dirFrom(yawOf(k.hor), roundTo(Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchOf(old) + spun)), step)), sel.kind === "connector" ? boxMiddle(c) : 0);
+  }
+  if (kb) d = { ...whole, extra_boxes: whole.extra_boxes.map((m, i) => i === kb - 1 ? { at: d.at, size: d.size } : m) };
+  held.draft = d;
+  const tied = c.stretchesWith;
+  Object.assign(sel.item, sel.kind === "connector" ? connectorItem(d, true) : sel.kind === "door" ? doorItem(d) : sel.kind === "part" ? partItem(d) : sel.kind === "opening" ? openingItem(d) : sel.kind === "same_place" ? sameItem(d) : fakeOutItem(d));
+  if (sel.kind === "same_place" && performance.now() - (held.redrawn || 0) > 150) { held.redrawn = performance.now(); moved(); }
+  if (sel.kind === "connector") sel.item.stretchesWith = tied;
+  overlay();
+}
+function release() {
+  const { k, draft, moved } = held;
+  held = null;
+  if (k.type === "wstart" || k.type === "wend") return moved ? edit({ whole_m: wholeOf(sel.item) }) : undefined;
+  if (LENGTHS.includes(k.type)) return moved ? edit({ start_m: stretch.start || "", end_m: stretch.end }) : undefined;
+  if (!draft) return;
+  if (sel.kind === "connector") return store({ ...draft, ...connectorFrom(toLocal(draft.at), draft.along, draft) });
+  if (sel.kind === "door") { const { behind, ...moved } = draft; return store(moved); }  // the server measures what is behind it where it is now
+  store(draft);
+}
+
+// ---------- colours and geometry ----------
+const regions = new Map();  // the flat surface around a triangle, by the triangle
+function flatRegion(k0) {  // every triangle in one plane with this one and joined to it
+  if (regions.has(k0)) return regions.get(k0);
+  const g = V.geometry(), P = g.pos, I = g.idx, eps = 2 / cur.quant, at = i => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], tri = k => [at(I[k]), at(I[k + 1]), at(I[k + 2])], normal = t => v3.unit(v3.cross(v3.sub(t[1], t[0]), v3.sub(t[2], t[0])));
+  const t0 = tri(k0), n0 = normal(t0), d0 = v3.dot(n0, t0[0]), flat = [];
+  for (let k = 0; k < I.length; k += 3) {
+    const t = tri(k);
+    if (t.some(v => Math.abs(v3.dot(n0, v) - d0) > eps) || v3.dot(normal(t), n0) < 0.995) continue;
+    flat.push({ k, t, lo: [0, 1, 2].map(a => Math.min(t[0][a], t[1][a], t[2][a]) - eps), hi: [0, 1, 2].map(a => Math.max(t[0][a], t[1][a], t[2][a]) + eps) });
+  }
+  const onEdge = (p, a, b) => { const e = v3.sub(b, a), s = Math.max(0, Math.min(1, v3.dot(v3.sub(p, a), e) / (v3.dot(e, e) || 1))); return v3.len(v3.sub(p, v3.add(a, v3.mul(e, s)))) <= eps; };
+  const touches = (x, y) => [0, 1, 2].every(a => x.lo[a] <= y.hi[a] && y.lo[a] <= x.hi[a]) && (x.t.some(p => y.t.some((q, i) => onEdge(p, q, y.t[(i + 1) % 3]))) || y.t.some(p => x.t.some((q, i) => onEdge(p, q, x.t[(i + 1) % 3]))));
+  const seed = flat.find(f => f.k === k0), seen = new Set([seed]), todo = [seed], out = [];
+  while (todo.length) {
+    const f = todo.pop();
+    out.push(f.t);
+    for (const o of flat) if (!seen.has(o) && touches(f, o)) { seen.add(o); todo.push(o); }
+  }
+  if (regions.size > 64) regions.clear();
+  regions.set(k0, out);
+  return out;
+}
+function surfaceAt(p, dir) {  // the flat surface a point on it and the direction into it stand for, as triangles; [] if there is none there
+  const reach = 32 / cur.quant, h = V.cast(v3.sub(p, v3.mul(dir, reach)), dir, reach * 2);
+  return h ? flatRegion(h.tri) : [];
+}
+function surfaceSize(h) {  // metres across and along the surface a fake out stands for, or null
+  const dir = v3.unit(v3.sub(h.to, h.c)), tris = surfaceAt(h.c, dir);
+  if (!tris.length) return null;
+  return axesOf(dir).map(a => { const d = tris.flat().map(p => v3.dot(p, a)); return +((Math.max(...d) - Math.min(...d)) / cur.per_metre).toFixed(1); });
+}
+let patched = "";
+function showSurface(spot) {  // spot: [a point on it, the direction into it], or null
+  const key = spot ? spot.flat().map(x => x.toFixed(2)).join() : "";
+  if (key === patched) return;
+  patched = key;
+  const lift = spot ? v3.mul(spot[1], -2 / cur.quant) : null;
+  V.setPatch(spot ? surfaceAt(...spot).flat(2).map((x, i) => x + lift[i % 3]) : [], [1, 0.62, 0.24, 0.45]);
+}
+function farRooms(c) {
+  if (!c.rooms) return new Set();
+  const tied = new Set([c, ...c.stretchesWith.map(i => cur.connectors[i])]), seen = new Set([c.rooms[1]]), todo = [c.rooms[1]];
+  while (todo.length) {
+    const r = todo.pop();
+    for (const o of cur.connectors) if (!tied.has(o) && o.rooms) for (const [a, b] of [o.rooms, [o.rooms[1], o.rooms[0]]]) if (a === r && !seen.has(b)) { seen.add(b); todo.push(b); }
+  }
+  return seen;
+}
+const isDropped = p => !!p.claim;
+function colours() {
+  if (!cur) return;
+  const n = cur.item_area.length, extraItems = 4 + cur.neighbours.length, data = new Uint8Array((n + extraItems) * 4);
+  const c = sel && sel.kind === "connector" ? sel.item : null, far = c ? farRooms(c) : null, byId = new Map(cur.areas.map(p => [p.id, p]));
+  for (let i = 0; i < n; i++) {
+    const p = byId.get(cur.item_area[i]);
+    let col = [70, 72, 80], show = $("route").checked ? 255 : 0;
+    if (p) {
+      col = hex(META.area_kinds[p.kind].colour);
+      if (isDropped(p)) { col = col.map(v => Math.round(v * 0.45)); show = $("dropped").checked ? 160 : 0; }
+      if (p.kind === "route" && !$("route").checked) show = 0;
+      if (sel && sel.kind === "area" && sel.item === p) col = col.map(v => Math.min(255, v + 90));
+    }
+    if (c) { col = far.has(cur.item_room[i]) ? [74, 163, 255] : c.rooms && cur.item_room[i] === c.rooms[0] ? [255, 90, 90] : [150, 150, 150]; }
+    data.set([...col, show], i * 4);
+  }
+  data.set([111, 224, 138, 255], n * 4);       // filler
+  data.set([60, 220, 110, 255], (n + 1) * 4);  // agreed
+  data.set([255, 60, 60, 255], (n + 2) * 4);   // conflict
+  data.set([190, 190, 190, 255], (n + 3) * 4);  // models
+  cur.neighbours.forEach((nb, k) => data.set([...hex(GAME_COLOUR[k % GAME_COLOUR.length]), 255], (n + 4 + k) * 4));
+  V.selected = -1;
+  V.setColours(data, n + extraItems);
+}
+const GAME_COLOUR = ["#e0a040", "#50a0ff", "#c070ff", "#60d0c0", "#ff80a0", "#b0c040"];
+function clip(poly, tan, m, d, keepAbove) {  // poly: [{p, uv}]; the part with (p - m) . tan >= d (or <=)
+  const f = v => { const s = (v.p[0] - m[0]) * tan[0] + (v.p[1] - m[1]) * tan[1] + (v.p[2] - m[2]) * tan[2] - d; return keepAbove ? s : -s; };
+  const out = [];
+  poly.forEach((v, i) => {
+    const w = poly[(i + 1) % poly.length], a = f(v), b = f(w);
+    if (a >= 0) out.push(v);
+    if ((a >= 0) !== (b >= 0)) { const t = a / (a - b); out.push({ p: v.p.map((x, k) => x + (w.p[k] - x) * t), uv: v.uv.map((x, k) => x + (w.uv[k] - x) * t) }); }
+  });
+  return out;
+}
+function crossing(poly, tan, m, d) {  // the line a surface leaves on the plane (p - m) . tan = d, or null. A surface that only ends on the plane counts on its near side, so that each line comes once
+  const f = v => v3.dot(v3.sub(v.p, m), tan) - d, s = poly.map(f), on = i => Math.abs(s[i]) <= 0.01;
+  const lying = [0, 1, 2].filter(on);
+  if (lying.length === 2) return s[[0, 1, 2].find(i => !on(i))] < 0 ? lying.map(i => poly[i]) : null;
+  if (lying.length === 3 || Math.min(...s) >= 0 || Math.max(...s) <= 0) return null;
+  const out = lying.map(i => poly[i]);
+  poly.forEach((v, i) => {
+    const j = (i + 1) % 3;
+    if (!on(i) && !on(j) && (s[i] > 0) !== (s[j] > 0)) { const t = s[i] / (s[i] - s[j]); out.push({ p: v.p.map((x, k) => x + (poly[j].p[k] - x) * t), uv: v.uv.map((x, k) => x + (poly[j].uv[k] - x) * t) }); }
+  });
+  return out.length === 2 ? out : null;
+}
+function uvAlong(poly, t) {  // how a surface's texture coordinates change per local unit along t: textures are laid by position, so a longer wall shows more of its texture
+  const e1 = v3.sub(poly[1].p, poly[0].p), e2 = v3.sub(poly[2].p, poly[0].p), a = v3.dot(e1, e1), b = v3.dot(e1, e2), c = v3.dot(e2, e2), d = v3.dot(t, e1), e = v3.dot(t, e2), det = a * c - b * b;
+  if (Math.abs(det) < 1e-9) return [0, 0];
+  const s = (c * d - b * e) / det, r = (a * e - b * d) / det;
+  return [0, 1].map(i => s * (poly[1].uv[i] - poly[0].uv[i]) + r * (poly[2].uv[i] - poly[0].uv[i]));
+}
+const boxes = new Map();  // what boxPolys found, by the box
+function boxPolys(c, start, end) {  // the map's surfaces in a connector's box, clipped to it
+  const key = [keyOf(cur), c.id, ...c.middle_local, ...c.along, ...c.half, start, end].join();
+  if (boxes.has(key)) return boxes.get(key);
+  const per = cur.per_metre, g = V.geometry(), P = g.pos, I = g.idx, N = g.nrm, m = c.middle_local, t = c.along, [a, b] = c.axes, hu = c.half[0] * per + 16 / cur.quant, hv = c.half[1] * per + 16 / cur.quant, out = [];
+  const within = (rel, axis, lo, hi) => { const d = rel.map(r => v3.dot(r, axis)); return Math.max(...d) >= lo && Math.min(...d) <= hi; };
+  for (let k = 0; k < I.length; k += 3) {
+    const tri = [I[k], I[k + 1], I[k + 2]], rel = tri.map(i => [P[i * 3] - m[0], P[i * 3 + 1] - m[1], P[i * 3 + 2] - m[2]]);
+    if (!within(rel, t, start * per, end * per) || !within(rel, a, -hu, hu) || !within(rel, b, -hv, hv)) continue;
+    let p = tri.map(i => ({ p: [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], uv: g.uv ? [g.uv[i * 2], g.uv[i * 2 + 1]] : [0, 0] }));
+    p = clip(p, t, m, start * per, true); if (p.length >= 3) p = clip(p, t, m, end * per, false);
+    if (p.length >= 3) out.push({ v: p.map(x => x.p), uv: p.map(x => x.uv), n: [N[tri[0] * 3] / 127, N[tri[0] * 3 + 1] / 127, N[tri[0] * 3 + 2] / 127], l: g.layer ? g.layer[tri[0]] : 65535 });
+  }
+  if (boxes.size > 32) boxes.clear();
+  boxes.set(key, out);
+  return out;
+}
+function vertexMoves(c, far) {  // which vertices slide with the far side: by room, but inside the tube by where the (moved) cut is
+  const u = cur.per_metre, m = c.middle_local, t = c.along, ua = c.axes[0], va = c.axes[1], hu = c.half[0] * u + 40 / cur.quant, hv = c.half[1] * u + 40 / cur.quant, reach = Math.max(8, Math.abs(stretch.start), Math.abs(boxEnd(c))) * u, start = stretch.start * u;
+  return (x, y, z, item, vertex) => {
+    const dx = x - m[0], dy = y - m[1], dz = z - m[2], s = dx * t[0] + dy * t[1] + dz * t[2];
+    if (Math.abs(s) <= reach && Math.abs(dx * ua[0] + dy * ua[1] + dz * ua[2]) <= hu && Math.abs(dx * va[0] + dy * va[1] + dz * va[2]) <= hv) return s > start;
+    return far.has(cur.vertex_room ? cur.vertex_room[vertex] : cur.item_room[item]);
+  };
+}
+let parted = { key: "" };  // how the map parts at the selected connector, kept while only the number of copies changes
+function partedAt(c) {  // which vertices slide with the far side; a surface across the cut would stretch, so it is hidden and drawn as its two halves
+  const key = [keyOf(cur), c.id, ...c.middle_local, ...c.along, stretch.start, ...c.stretchesWith].join();
+  if (parted.key === key && parted.rooms === cur.vertex_room) return parted;
+  const g = V.geometry(), P = g.pos, I = g.idx, n = P.length / 3, moves = vertexMoves(c, farRooms(c)), far = new Uint8Array(n), hide = new Uint8Array(n), first = new Int32Array(n).fill(-1), per = cur.per_metre;
+  for (let i = 0; i < n; i++) far[i] = moves(P[i * 3], P[i * 3 + 1], P[i * 3 + 2], g.item[i], i) ? 1 : 0;
+  for (let k = 0; k < I.length; k += 3) first[I[k]] = first[I[k + 1]] = first[I[k + 2]] = I[k];  // every surface is a fan from its first vertex
+  for (let i = 0; i < n; i++) if (first[i] >= 0 && far[i] !== far[first[i]]) hide[first[i]] = 1;
+  const cuts = [c, ...c.stretchesWith.map(i => cur.connectors[i])].map(o => ({ m: o.middle_local, t: v3.dot(o.along, c.along) < 0 ? v3.mul(o.along, -1) : o.along, s: (o === c ? stretch.start : 0) * per, axes: o.axes, half: o.half }));
+  const near = [], beyond = [], across = [];
+  for (let k = 0; k < I.length; k += 3) {
+    if (!hide[I[k]]) continue;
+    const tri = [I[k], I[k + 1], I[k + 2]], at = i => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], mid = v3.mul(v3.add(v3.add(at(tri[0]), at(tri[1])), at(tri[2])), 1 / 3);
+    const cut = cuts.reduce((a, b) => v3.len(v3.sub(mid, a.m)) <= v3.len(v3.sub(mid, b.m)) ? a : b);
+    const poly = tri.map(i => ({ p: at(i), uv: g.uv ? [g.uv[i * 2], g.uv[i * 2 + 1]] : [0, 0] })), base = { n: [g.nrm[tri[0] * 3] / 127, g.nrm[tri[0] * 3 + 1] / 127, g.nrm[tri[0] * 3 + 2] / 127], l: g.layer ? g.layer[tri[0]] : 65535, it: g.item[tri[0]] };
+    for (const [list, above] of [[near, false], [beyond, true]]) {
+      const part = clip(poly, cut.t, cut.m, cut.s, above);
+      if (part.length >= 3) list.push({ ...base, v: part.map(x => x.p), uv: part.map(x => x.uv) });
+    }
+  }
+  const pad = 16 / cur.quant;
+  for (let k = 0; k < I.length; k += 3) {
+    const tri = [I[k], I[k + 1], I[k + 2]], pts = tri.map(i => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]);
+    for (const cut of cuts) {
+      const rel = pts.map(q => v3.sub(q, cut.m));
+      if (!rel.some(r => Math.abs(v3.dot(r, cut.axes[0])) <= cut.half[0] * per + pad && Math.abs(v3.dot(r, cut.axes[1])) <= cut.half[1] * per + pad)) continue;
+      const poly = tri.map((i, j) => ({ p: pts[j], uv: g.uv ? [g.uv[i * 2], g.uv[i * 2 + 1]] : [0, 0] })), line = crossing(poly, cut.t, cut.m, cut.s);
+      if (line) across.push({ n: [g.nrm[tri[0] * 3] / 127, g.nrm[tri[0] * 3 + 1] / 127, g.nrm[tri[0] * 3 + 2] / 127], l: g.layer ? g.layer[tri[0]] : 65535, it: g.item[tri[0]], line, t: cut.t, duv: uvAlong(poly, cut.t) });
+    }
+  }
+  return parted = { key, rooms: cur.vertex_room, far, hide, first, near, beyond, across };
+}
+function shrunk(c, amount) {  // the map with a length of a connector taken out: what is past it moves back, what is within it goes
+  const g = V.geometry(), P = g.pos, I = g.idx, n = P.length / 3, per = cur.per_metre, far = farRooms(c), m = c.middle_local, t = c.along, [ua, va] = c.axes, hu = c.half[0] * per + 40 / cur.quant, hv = c.half[1] * per + 40 / cur.quant, from = wholeOf(c)[0] * per, to = from + amount * per, cut = stretch.start * per, lo = Math.min(from, cut) - 8 * per, hi = Math.max(to, cut) + 8 * per;
+  const along = new Float32Array(n), inTube = new Uint8Array(n), moves = new Uint8Array(n), first = new Int32Array(n).fill(-1), hide = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = [P[i * 3] - m[0], P[i * 3 + 1] - m[1], P[i * 3 + 2] - m[2]];
+    along[i] = v3.dot(d, t);
+    inTube[i] = Math.abs(v3.dot(d, ua)) <= hu && Math.abs(v3.dot(d, va)) <= hv && along[i] >= lo && along[i] <= hi ? 1 : 0;
+    moves[i] = inTube[i] ? (along[i] >= to ? 1 : 0) : (far.has(cur.vertex_room ? cur.vertex_room[i] : cur.item_room[g.item[i]]) ? 1 : 0);
+  }
+  for (let k = 0; k < I.length; k += 3) first[I[k]] = first[I[k + 1]] = first[I[k + 2]] = I[k];
+  const removed = i => inTube[i] && along[i] > from + 1e-3 && along[i] < to - 1e-3;
+  for (let i = 0; i < n; i++) if (first[i] >= 0 && (moves[i] !== moves[first[i]] || removed(i))) hide[first[i]] = 1;
+  const near = [], beyond = [];
+  for (let k = 0; k < I.length; k += 3) {
+    if (!hide[I[k]]) continue;
+    const tri = [I[k], I[k + 1], I[k + 2]], poly = tri.map(i => ({ p: [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], uv: g.uv ? [g.uv[i * 2], g.uv[i * 2 + 1]] : [0, 0] })), base = { n: [g.nrm[tri[0] * 3] / 127, g.nrm[tri[0] * 3 + 1] / 127, g.nrm[tri[0] * 3 + 2] / 127], l: g.layer ? g.layer[tri[0]] : 65535, it: g.item[tri[0]] };
+    for (const [list, above, plane] of [[near, false, from], [beyond, true, to]]) {
+      const part = clip(poly, t, m, plane, above);
+      if (part.length >= 3) list.push({ ...base, v: part.map(x => x.p), uv: part.map(x => x.uv) });
+    }
+  }
+  return { moves, hide, first, near, beyond };
+}
+function moved() {  // apply the preview: far side moved, the leftover as plain wall and then whole copies of the box in the gap, neighbours and their overlaps added
+  const pos = [], nrm = [], item = [], kind = [], uv = [], layer = [], idx = [], col = [], n = cur.item_area.length, GREY = [0.5, 0.5, 0.5];
+  const push = (poly, it, c) => {
+    const first = pos.length / 3;
+    poly.v.forEach((v, i) => { pos.push(...v); nrm.push(...poly.n); item.push(it); kind.push(poly.n[2] > 0.7 ? 0 : poly.n[2] < -0.7 ? 2 : 1); uv.push(...(poly.uv ? poly.uv[i] : [0, 0])); layer.push(poly.l === undefined ? 65535 : poly.l); col.push(...c); });
+    for (let i = 1; i + 1 < poly.v.length; i++) idx.push(first, first + i, first + i + 1);
+  };
+  if (sel && sel.kind === "connector" && stretch.m < 0) {
+    const c = sel.item, d = c.along.map(t => t * stretch.m * cur.per_metre), p = shrunk(c, -stretch.m), P = V.geometry().pos;
+    V.offsetVertices((x, y, z, it, i) => p.first[i] >= 0 && p.hide[p.first[i]] ? [P[p.first[i] * 3] - x, P[p.first[i] * 3 + 1] - y, P[p.first[i] * 3 + 2] - z] : p.moves[i] ? d : null);
+    for (const q of p.near) push(q, q.it, GREY);
+    for (const q of p.beyond) push({ ...q, v: q.v.map(v => v3.add(v, d)) }, q.it, GREY);
+  } else if (sel && sel.kind === "connector" && stretch.m) {
+    const c = sel.item, L = boxLength(c), u = cur.per_metre, d = c.along.map(t => t * stretch.m * u), p = partedAt(c), P = V.geometry().pos, { n: laidCopies, plain } = laid(c);
+    V.offsetVertices((x, y, z, it, i) => p.first[i] >= 0 && p.hide[p.first[i]] ? [P[p.first[i] * 3] - x, P[p.first[i] * 3 + 1] - y, P[p.first[i] * 3 + 2] - z] : p.far[i] ? d : null);
+    for (const q of p.near) push(q, q.it, GREY);
+    for (const q of p.beyond) push({ ...q, v: q.v.map(v => v3.add(v, d)) }, q.it, GREY);
+    if (plain > 0.01) for (const q of p.across) {
+      const [a, b] = q.line, go = v3.mul(q.t, plain * u), more = uv => uv.map((x, i) => x + q.duv[i] * plain * u);
+      push({ v: [a.p, b.p, v3.add(b.p, go), v3.add(a.p, go)], uv: [a.uv, b.uv, more(b.uv), more(a.uv)], n: q.n, l: q.l }, n, GREY);
+    }
+    for (const con of [c, ...c.stretchesWith.map(i => cur.connectors[i])]) {
+      const a = con === c ? stretch.start : 0, way = con.along.map(t => t * u * Math.sign(v3.dot(con.along, c.along))), polys = boxPolys(con, a, a + L);
+      for (let k = 0; k < laidCopies; k++) for (const q of polys) push({ v: q.v.map(v => v.map((x, a_) => x + way[a_] * (plain + k * L))), uv: q.uv, n: q.n, l: q.l }, n, GREY);
+    }
+  } else V.offsetVertices(null);
+  const cube = (c, half, it, colour) => {
+    const q = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(s => s.map((v, a) => c[a] + v * half));
+    for (const [f, nn] of [[[0,1,2,3],[0,0,-1]],[[4,5,6,7],[0,0,1]],[[0,1,5,4],[0,-1,0]],[[2,3,7,6],[0,1,0]],[[1,2,6,5],[1,0,0]],[[3,0,4,7],[-1,0,0]]]) push({ v: f.map(i => q[i]), n: nn }, it, colour);
+  };
+  cur.neighbours.forEach((nb, k) => {
+    const faces = shown.get(nbKey(nb));
+    if (!faces) return;
+    const it = n + 4 + k, c = hex(GAME_COLOUR[k % GAME_COLOUR.length]).map(v => v / 255);
+    for (const f of faces) push({ v: f.v, n: f.n }, it, c);
+    const half = cur.cell_half * 0.92;
+    for (const p of nb.agreed) cube(p, half, n + 1, [0.25, 0.86, 0.43]);
+    for (const p of nb.conflict) cube(p, half, n + 2, [1, 0.25, 0.25]);
+  });
+  if (sel && sel.kind === "same_place" && sameFaces.has(sel.item.game + "/" + sel.item.map)) {  // the other map, where the picked same place claim puts it
+    const o = sel.item.offset, q = cur.quant, c0 = cur.centre;
+    for (const f of sameFaces.get(sel.item.game + "/" + sel.item.map).faces) push({ v: f.v.map(p => [(p[0] + o[0] - c0[0]) / q, (p[1] + o[1] - c0[1]) / q, (p[2] + o[2] - c0[2]) / q]), n: f.n }, n + 3, [0.55, 0.82, 1]);
+  }
+  V.setExtra(new Float32Array(pos), new Float32Array(nrm), new Uint16Array(item), new Uint8Array(kind), new Float32Array(uv), new Uint16Array(layer), new Uint32Array(idx), new Float32Array(col));
+}
+function box(lo, hi) {
+  const p = (x, y, z) => [x ? hi[0] : lo[0], y ? hi[1] : lo[1], z ? hi[2] : lo[2]], out = [];
+  for (const [a, b] of [[[0,0,0],[1,0,0]],[[0,1,0],[1,1,0]],[[0,0,1],[1,0,1]],[[0,1,1],[1,1,1]],[[0,0,0],[0,1,0]],[[1,0,0],[1,1,0]],[[0,0,1],[0,1,1]],[[1,0,1],[1,1,1]],[[0,0,0],[0,0,1]],[[1,0,0],[1,0,1]],[[0,1,0],[0,1,1]],[[1,1,0],[1,1,1]]]) out.push(...p(...a), ...p(...b));
+  return out;
+}
+function overlay() {
+  if (!cur || !V) return;
+  if (V.solo) { V.setLines([]); V.draw(); return; }  // a model shown alone: nothing of the map
+  if (alone) {  // a part shown alone: its box and handles, nothing of the rest of the map
+    const pt = cur.parts.find(x => x.id === alone.id);
+    const ops = cur.openings.filter(o => o.part === alone.id).map(o => {  // each opening's outline, and an arrow out of the part
+      const d = alone.openings.find(x => x.id === o.id), picked = sel && sel.kind === "opening" && sel.item.id === o.id;
+      return { pairs: [...ringPairs(o.corners), ...o.c, ...o.tip], colour: picked ? [1, 1, 1, 1] : [...hex(OPENING[d ? d.type : "goes_on"][1]).map(v => v / 255), 1], width: picked ? 3 : 2 };
+    });
+    V.setLines([...(pt ? pt.boxes.map(b => ({ pairs: boxPairs(b.corners), colour: [1, 1, 1, 0.5] })) : []), ...ops, ...gizmo()]); V.draw(); return;
+  }
+  const sets = { sel: [], nothing: [], further: [], next: [], out_of_sight: [], dark_end: [], leads_on: [], prop: [] }, out = [];
+  if ($("modelview").value === "markers") { const a = 12 / cur.quant; for (const [x, y, z] of cur.props) sets.prop.push(x - a, y, z, x + a, y, z, x, y - a, z, x, y + a, z, x, y, z - a, x, y, z + a); }
+  for (const d of cur.doors) {
+    const picked = sel && sel.item === d;
+    if (!$("doors").checked && !picked) continue;
+    (picked ? sets.sel : sets[d.status]).push(...doorPairs(d));
+  }
+  for (const h of cur.fakeOuts) { const picked = sel && sel.item === h; if (($("fake_outs").checked && listedFakeOut(h)) || picked) (picked ? sets.sel : sets[h.type] || sets.out_of_sight).push(...h.c, ...h.to); }
+  const COL = { sel: [1, 1, 1, 1], out_of_sight: [0.2, 0.9, 1, 1], dark_end: [0.69, 0.44, 1, 1], leads_on: [1, 0.62, 0.24, 1], prop: [0.6, 0.9, 0.6, 0.9] };
+  for (const [k, pairs] of Object.entries(sets)) out.push({ pairs, colour: COL[k] || BEHIND[k][2] });
+  for (const s of cur.signs || []) {  // a sign's outline, and an arrow from it for each place it points to
+    const picked = sel && sel.item === s;
+    if (!$("signs").checked && !picked) continue;
+    out.push({ pairs: ringPairs(s.corners), colour: picked ? [1, 1, 1, 1] : [0.55, 1, 0.55, 1], width: picked ? 2.5 : 1.5 });
+    const from = v3.add(s.c, v3.mul(s.normal, 8 / cur.quant)), reach = 96 / cur.quant, head = 18 / cur.quant;
+    for (const p of s.points) {
+      const tip = v3.add(from, v3.mul(p.dir, reach)), side = v3.unit(v3.cross(p.dir, Math.abs(p.dir[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]));
+      out.push({ pairs: [...from, ...tip, ...tip, ...v3.add(tip, v3.add(v3.mul(p.dir, -head), v3.mul(side, head / 2))), ...tip, ...v3.add(tip, v3.add(v3.mul(p.dir, -head), v3.mul(side, -head / 2)))], colour: [1, 0.85, 0.25, 1], width: picked ? 3 : 2 });
+    }
+  }
+  for (const pt of cur.parts) {
+    const picked = sel && sel.item === pt, colour = [...hex(styleHex(pt.kind)).map(v => v / 255), 1];
+    if ($("parts").checked || picked) pt.boxes.forEach((b, k) => out.push({ pairs: boxPairs(b.corners), colour: picked && k === sel.box ? [1, 1, 1, 1] : colour, width: picked ? 2.5 : 1.5 }));
+  }
+  if ($("tracks").checked) out.push({ pairs: cur.tracks.flat(), colour: [1, 0.25, 0.78, 0.8] });
+  if ($("changes").checked) {  // each level change's trigger, and the space the level it leads to holds too
+    for (const c of cur.changes) out.push({ pairs: box(c.lo, c.hi), colour: [1, 0.55, 0.1, 1], width: 2 });
+    for (const nb of cur.neighbours) if (nb.kind !== "same" && nb.agreed.length) {
+      const h = cur.cell_half, lo = [0, 1, 2].map(a => Math.min(...nb.agreed.map(q => q[a])) - h), hi = [0, 1, 2].map(a => Math.max(...nb.agreed.map(q => q[a])) + h);
+      out.push({ pairs: box(lo, hi), colour: [0.35, 1, 0.5, 0.8] });
+    }
+  }
+  if ($("connectors").checked) for (const c of cur.connectors) if (!sel || sel.item !== c) { const pairs = ringPairs(c.outline); for (let k = 0; k + 1 < c.path.length; k++) pairs.push(...c.path[k], ...c.path[k + 1]); out.push({ pairs, colour: [CCOL[c.way][0], CCOL[c.way][1], CCOL[c.way][2], 0.7], width: 2 }); }
+  if (sel && sel.kind === "connector") {
+    const c0 = sel.item, u = cur.per_metre;
+    for (const c of [c0, ...c0.stretchesWith.map(i => cur.connectors[i])]) {
+      const s0 = (c === c0 ? stretch.start : 0) * u, s1 = (c === c0 ? boxEnd(c0) : c.slab.m) * u, d = c.along.map(t => t * stretch.m * u);
+      const at = (k, s) => c.outline[k].map((v, a) => v + c.along[a] * s), ring = [], moved_ = [], arm2 = [];
+      for (let k = 0; k < 4; k++) ring.push(...at(k, s0), ...at((k + 1) % 4, s0), ...at(k, s1), ...at((k + 1) % 4, s1), ...at(k, s0), ...at(k, s1));
+      if (stretch.m) for (let k = 0; k < 4; k++) { const p = at(k, s0).map((v, a) => v + d[a]), q = at((k + 1) % 4, s0).map((v, a) => v + d[a]); moved_.push(...p, ...q); arm2.push(...at(k, s0), ...p); }
+      out.push({ pairs: ring, colour: [1, 1, 1, 1] }, { pairs: moved_, colour: [0.29, 0.64, 1, 1] }, { pairs: arm2, colour: [0.29, 0.64, 1, 0.7] });
+    }
+    const [w0, w1] = wholeOf(c0).map(x => x * u), at = (k, s) => c0.outline[k].map((v, a) => v + c0.along[a] * s), length = [];
+    for (let k = 0; k < 4; k++) length.push(...at(k, w0), ...at((k + 1) % 4, w0), ...at(k, w1), ...at((k + 1) % 4, w1), ...at(k, w0), ...at(k, w1));
+    out.push({ pairs: length, colour: COL_KNOB.whole });
+    if (c0.proof.box) out.push({ pairs: box(c0.proof.box[0], c0.proof.box[1]), colour: [0.2, 0.9, 1, 1] });
+  }
+  const pickedFakeOut = sel && sel.kind === "fake_out" ? sel.item : null;
+  showSurface(ghost && ghost.surface ? ghost.surface : pickedFakeOut ? [pickedFakeOut.c, v3.unit(v3.sub(pickedFakeOut.to, pickedFakeOut.c))] : null);
+  if (again && again.changes) again.changes.forEach((c, j) => {
+    const col = j === againPicked ? [1, 1, 1, 1] : [...AGAIN[c.change][1].slice(0, 3), again.keep[j] ? 1 : 0.45];
+    if (c.line && c.then) out.push({ pairs: shapeOf(c.line), colour: [...col.slice(0, 3), 0.35] }, { pairs: [...toLocal(c.line.at), ...toLocal(c.then.at)], colour: col });
+    out.push({ pairs: shapeOf(c.then || c.line), colour: col, width: 2 });
+  });
+  out.push(...gizmo());
+  if (ghost && ghost.pairs) out.push({ pairs: ghost.pairs, colour: [1, 1, 1, 0.95] });
+  V.setLines(out); V.draw();
+}
+async function doorsThatOpen() {  // unticked: the map's doors that open are left out, to see through them
+  if (!V || !cur) return;
+  if ($("opening").checked) return V.hide(null);
+  const map = cur;
+  if (!map.opening) {
+    const r = await fetch("opening/" + map.name);
+    if (!r.ok) { $("markmsg").textContent = await r.text(); return; }
+    map.opening = await r.json();
+  }
+  if (cur !== map || $("opening").checked) return;
+  const g = V.geometry();
+  if (map.opening.vertices !== g.item.length) { $("markmsg").textContent = "this page was built with other faces for the map: rebuild it to leave out its doors"; return; }
+  const marked = new Uint8Array(g.item.length);
+  for (const [first, n] of map.opening.runs) marked.fill(1, first, first + n);
+  V.hide(marked);
+}
+function controls() {
+  if (!V) return;
+  V.show = [1, 1, +$("ceilings").checked];
+  V.front = $("fronts").checked;
+  V.textures = $("surf").value !== "plain"; V.real = $("surf").value === "real";
+  colours(); V.draw();
+}
+
+// ---------- neighbours ----------
+let waiting = null;
+function toggleNeighbour(key, on) {
+  if (!on) { shown.delete(key); moved(); listRows(); detail(); return; }
+  $("msg").textContent = "Loading " + key + "...";
+  waiting = key;
+  fetchMap(key);
+}
+function fetchMap(key) {  // a map's view (game/map): the app builds it from the game the first time it is asked for
+  const failed = () => { waiting = null; pendingPick = null; $("msg").textContent = `Could not load ${key}`; };
+  const s = document.createElement("script"); s.src = "maps/" + key + ".js";
+  s.onerror = failed;
+  document.head.appendChild(s); s.onload = () => s.remove();
+}
+const sameFaces = new Map();  // another map's faces in its own coordinates (units), for lining it up with this one
+let sameWaiting = null, sameThen = null, otherMaps = [];  // otherMaps: the maps of the other pages beside this one
+function loadOther(key, then) {  // another map's view (game/map), of this page or another
+  if (sameWaiting) return;
+  sameWaiting = key; sameThen = then; $("msg").textContent = "Loading " + key + "...";
+  const s = document.createElement("script"); s.src = "maps/" + key + ".js";
+  s.onerror = () => { sameWaiting = sameThen = null; $("msg").textContent = `Could not load ${key}`; };
+  document.head.appendChild(s); s.onload = () => s.remove();
+}
+function sameLoaded(data) {
+  const name = sameWaiting, then = sameThen, buf = decodeBase64(data.b64), [P, N, , , X] = data.layout, faces = [];
+  sameWaiting = sameThen = null;
+  const pos = new Int16Array(buf, P[0], P[1]), nrm = new Int8Array(buf, N[0], N[1]), idx = new Uint32Array(buf, X[0], X[1]), at = i => [0, 1, 2].map(a => pos[i * 3 + a] * data.quant + data.centre[a]);
+  for (let t = 0; t + 2 < idx.length; t += 3) faces.push({ v: [at(idx[t]), at(idx[t + 1]), at(idx[t + 2])], n: [nrm[idx[t] * 3] / 127, nrm[idx[t] * 3 + 1] / 127, nrm[idx[t] * 3 + 2] / 127] });
+  sameFaces.set(name, { faces, centre: data.centre, game: titleOf(data) });
+  $("msg").textContent = "";
+  if (then) then(data);
+  detail();
+}
+const mapNames = () => { $("mapnames").innerHTML = [...META.maps, ...otherMaps].filter(m => m.source).map(m => `<option value="${keyOf(m)}">${esc(m.game)}</option>`).join(""); };  // the maps a same place can pair with, as game/map
+const sameItem = l => ({ ...l, line: l, c: toLocal(l.at), offset: v3.sub(l.at, l.there) });  // offset: a point there plus it is a point here
+async function sameStart() {  // a same place claim for the spot looked at, the other map placed where it shares this one's coordinates if it is of this game, else centred on the spot
+  const key = $("samemap").value.trim(), [game, name] = key.split("/");
+  if (![...META.maps, ...otherMaps].some(m => keyOf(m) === key)) { $("msg").textContent = `No page has a map ${key} (game/map)`; return; }
+  if (key === keyOf(cur)) { $("msg").textContent = "That is this map"; return; }
+  const was = cur.samePlaces.find(x => x.game === game && x.map === name);
+  if (was) return pick("same_place", was, true);
+  const at = toMap(V.cam.target);
+  loadOther(key, data => {
+    const there = game === cur.source ? at : data.centre.map(Math.round);
+    store({ kind: "same_place", at, game, map: name, there }).then(saved => { if (saved) pick("same_place", cur.samePlaces.find(x => x.id === saved.id), false); });
+  });
+}
+function neighbourLoaded(data) {
+  const key = waiting; waiting = null;
+  const nb = cur.neighbours.find(x => nbKey(x) === key), buf = decodeBase64(data.b64), [P, N, , , X] = data.layout;
+  const pos = new Int16Array(buf, P[0], P[1]), nrm = new Int8Array(buf, N[0], N[1]), idx = new Uint32Array(buf, X[0], X[1]), faces = [];
+  const off = nb.offset, tr = i => [0, 1, 2].map(a => (pos[i * 3 + a] * data.quant + data.centre[a] + off[a] - cur.centre[a]) / cur.quant);
+  for (let t = 0; t + 2 < idx.length; t += 3) faces.push({ v: [tr(idx[t]), tr(idx[t + 1]), tr(idx[t + 2])], n: [nrm[idx[t] * 3] / 127, nrm[idx[t] * 3 + 1] / 127, nrm[idx[t] * 3 + 2] / 127] });
+  shown.set(key, faces);
+  $("msg").textContent = ""; moved(); listRows(); detail();
+}
+
+// ---------- evaluating a map again ----------
+const AGAIN = { new: ["New", [0.35, 1, 0.45, 1], "#5aff73"], different: ["Different", [1, 0.85, 0.2, 1], "#ffd933"], gone: ["Gone", [1, 0.3, 0.3, 1], "#ff4d4d"] };
+const KIND = { fake_door: "Fake door", ought_door: "Ought door", connector: "Connector", fake_out: "Fake out", area: "Area", part: "Part", opening: "Opening", place: "Place", level_change: "Level change", same_place: "Same place" };
+let again = null, againPicked = -1;  // the current map's evaluation again: {state, seconds, changes, keep, why}, and the change looked at
+function shapeOf(l) {  // a claim as lines to draw, whatever its kind
+  if (l.kind === "fake_door" || l.kind === "ought_door") return doorPairs(doorItem(l));
+  if (l.kind === "connector") { const p = l.path.map(toLocal), out = ringPairs(l.outline.map(toLocal)); for (let k = 0; k + 1 < p.length; k++) out.push(...p[k], ...p[k + 1]); return out; }
+  if (l.kind === "fake_out") return [...toLocal(l.at), ...toLocal(l.reaches)];
+  if (l.kind === "opening") return openingPairs(l);
+  const c = toLocal(l.at), arm = 40 / cur.quant, out = [];
+  for (let a = 0; a < 3; a++) { const u = [...c], w = [...c]; u[a] -= arm; w[a] += arm; out.push(...u, ...w); }
+  return out;
+}
+function partAxes(facing) {  // a part's length, width and height directions
+  const n = Math.hypot(facing[0], facing[1]) || 1;
+  return [[facing[0] / n, facing[1] / n, 0], [-facing[1] / n, facing[0] / n, 0], [0, 0, 1]];
+}
+const nearestAxis = (d, axes) => [0, 1, 2].reduce((m, k) => Math.abs(v3.dot(d, axes[k])) > Math.abs(v3.dot(d, axes[m])) ? k : m, 0);
+function openingItem(l) {  // an opening claim as the page draws and edits it (local units): its side's two directions u and w, square to its part as bmab.parts has them
+  const p = cur.lines.find(x => x.id === l.part), axes = partAxes(p ? p.facing : [1, 0, 0]), [u, w] = [0, 1, 2].filter(k => k !== nearestAxis(l.facing, axes)).map(k => axes[k]);
+  const c = toLocal(l.at);
+  return { ...l, line: l, c, u, w, corners: cornersOf(c, u, w, l.size[0] / 2 / cur.quant, l.size[1] / 2 / cur.quant), tip: v3.add(c, v3.mul(l.facing, 48 / cur.quant)) };
+}
+function openingPairs(l) { const o = openingItem(l); return [...ringPairs(o.corners), ...o.c, ...o.tip]; }  // its outline and an arrow out of its part
+function whatChanged(c) {  // a change in words
+  const l = c.then || c.line, type = l.kind === "connector" || l.kind === "opening" ? NAMES[l.way] : l.kind === "area" ? SHORT[l.type] : (l.type || "").replace(/_/g, " ");
+  let how = "";
+  if (c.change === "different") {
+    const moved = Math.hypot(...v3.sub(c.then.at, c.line.at)) * 0.0254, rest = Object.keys(c.then).filter(k => !["at", "id"].includes(k) && JSON.stringify(c.then[k]) !== JSON.stringify(c.line[k]));
+    how = [moved >= 0.05 ? `moved ${moved.toFixed(1)} m` : "", ...rest].filter(Boolean).join(", ");
+  }
+  return `${KIND[l.kind]} ${esc(type || "")}${how ? ` <span class="why">${esc(how)}</span>` : ""}`;
+}
+function showAgain(name, r, look) {  // what the server says about the map's (game/map) evaluation again; look: show its tab
+  if (!cur || keyOf(cur) !== name) return;
+  const tab = document.querySelector('.tab[data-kind="again"]'), was = again ? again.state : "none";
+  if (r.state === "none") {
+    again = null; againPicked = -1; tab.style.display = "none";
+    if (document.querySelector('.page.on[data-kind="again"]')) showTab("connector");
+    $("again").disabled = !!r.busy; $("again").title = r.busy ? `Busy ${r.busy}` : "Run the detectors over this map again and pick which of their changes to keep";
+    if (r.busy) setTimeout(() => fetch("evaluate/" + name).then(x => x.json()).then(x => { if (!again) showAgain(name, x); }).catch(() => {}), 3000);
+    return overlay();
+  }
+  again = { ...r, keep: (r.changes || []).map(c => c.keep) }; againPicked = -1;
+  tab.style.display = ""; $("again").disabled = r.state === "running";
+  if (look || was !== r.state) showTab("again");
+  againList(); overlay();
+  if (r.state === "running") setTimeout(() => fetch("evaluate/" + name).then(x => x.json()).then(x => showAgain(name, x)).catch(() => {}), 2000);
+}
+function againList() {
+  const time = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`, n = again.changes ? again.changes.length : 0;
+  $("n-again").textContent = n || "";
+  $("keep").style.display = n ? "" : "none";
+  $("closeagain").style.display = again.state === "running" ? "none" : "";
+  $("againmsg").innerHTML = again.state === "running" ? `Running the detectors over ${cur.name} again: ${time(again.seconds)} so far. Most of it is the search for fake outs, from under a minute to a few.`
+    : again.state === "failed" ? `Could not evaluate ${cur.name} again: ${esc(again.why)}`
+    : !n ? `The detectors say nothing different from what is claimed (${time(again.seconds)}).`
+    : `What the detectors say now that differs from what is claimed. Ticked to begin with: what is new and was never deleted, and what is different but still as the detectors first wrote it. Click one to see it.`;
+  const rows = [];
+  for (const g of ["new", "different", "gone"]) {
+    const js = (again.changes || []).map((c, j) => c.change === g ? j : -1).filter(j => j >= 0);
+    if (!js.length) continue;
+    rows.push(`<div class="group"><span class="sw" style="background:${AGAIN[g][2]}"></span><b>${AGAIN[g][0]}</b> ${js.length}<a data-all="${g}">all</a><a data-none="${g}">none</a></div>`);
+    for (const j of js) rows.push(`<div class="row${j === againPicked ? " sel" : ""}" data-j="${j}"><input type="checkbox" data-j="${j}" ${again.keep[j] ? "checked" : ""}><span class="k">${whatChanged(again.changes[j])}</span><span class="why">${esc(again.changes[j].why)}</span></div>`);
+  }
+  $("rows-again").innerHTML = rows.join("");
+  $("rows-again").querySelectorAll("input").forEach(el => { el.onclick = e => { e.stopPropagation(); again.keep[+el.dataset.j] = el.checked; overlay(); }; });
+  $("rows-again").querySelectorAll("a").forEach(el => { el.onclick = () => { const g = el.dataset.all || el.dataset.none; again.changes.forEach((c, j) => { if (c.change === g) again.keep[j] = !!el.dataset.all; }); againList(); overlay(); }; });
+  $("rows-again").querySelectorAll(".row").forEach(el => { el.onclick = () => {
+    againPicked = +el.dataset.j;
+    const l = again.changes[againPicked].then || again.changes[againPicked].line;
+    V.cam.target = toLocal(l.at); V.cam.dist = Math.min(Math.max(V.cam.dist, 300 / cur.quant), 900 / cur.quant);
+    againList(); overlay();
+  }; });
+}
+async function evaluateAgain() {
+  const name = keyOf(cur), r = await fetch("evaluate/" + name, { method: "POST", headers: { "Content-Type": "application/json" } });
+  if (!r.ok) { $("count").textContent = await r.text(); return; }
+  showAgain(name, await r.json(), true);
+}
+async function keepTicked() {  // each ticked change saved as if made by hand, so that levels holding the same place follow
+  const name = keyOf(cur), todo = again.changes.filter((c, j) => again.keep[j]);
+  $("keep").disabled = true;
+  for (const c of todo) {
+    if (!cur || keyOf(cur) !== name) return;
+    if (c.change === "gone") await unstore(c.line); else await store(c.then);
+  }
+  $("keep").disabled = false;
+  fetch("evaluate/" + name).then(r => r.json()).then(r => showAgain(name, r));  // what is left
+}
+
+// ---------- loading ----------
+function modelView() {
+  const how = $("modelview").value;
+  localStorage.setItem("models", how);
+  V.showModels = how === "real";
+  if (how !== "markers") $("markmsg").textContent = placing ? $("markmsg").textContent : "";
+  if (how === "real" && cur && !cur.modelsAsked) { cur.modelsAsked = true; fetchModels(keyOf(cur)); }
+  overlay(); V.draw();
+}
+function fetchModels(key) {
+  const s = document.createElement("script"); s.src = "maps/" + key + ".models.js";
+  document.head.appendChild(s); s.onload = () => s.remove();
+}
+window.modelsLoaded = function (data) {
+  if (!cur || keyOf(data) !== keyOf(cur)) return;
+  const buf = decodeBase64(data.b64), [P, N, U, L, X, M] = data.layout, layers = new Uint16Array(buf, L[0], L[1]).slice(), shift = cur.tex ? cur.tex.length : 0;
+  for (let i = 0; i < layers.length; i++) if (layers[i] !== 65535) layers[i] += shift;
+  const inst = new Float32Array(buf, M[0], M[1]);
+  V.setModels({ pos: new Int16Array(buf, P[0], P[1]), nrm: new Int8Array(buf, N[0], N[1]), uv: new Uint16Array(buf, U[0], U[1]), layer: layers, idx: new Uint32Array(buf, X[0], X[1]), inst, parts: data.parts, item: cur.item_area.length + 3 });
+  cur.modelShapes = data.shapes || [];
+  cur.modelPlace = data.copies ? new Map() : null;  // marker -> [shape, copy, its middle, its size in units, triangles]
+  if (data.copies) data.parts.forEach(([_first, count, copy, copies], k) => {
+    for (let j = 0; j < copies; j++) { const r = (copy + j) * 12; cur.modelPlace.set(data.copies[copy + j], [k, j, [inst[r + 3], inst[r + 7], inst[r + 11]], data.shapes[k].size, count / 3]); }
+  });
+  if (sel && sel.kind === "model") { look("model", sel.item); detail(); overlay(); }
+  if (data.sheet) { const img = new Image(); img.style.display = "none"; img.onload = () => { if (cur && keyOf(cur) === keyOf(data)) V.setSheet(cur.sheetImg, cur.tex, img, data.tex); img.remove(); }; img.src = data.sheet; document.body.appendChild(img); }
+};
+window.mapLoaded = function (data) {
+  if (sameWaiting) return sameLoaded(data);
+  if (waiting) return neighbourLoaded(data);
+  data.game = titleOf(data);
+  try {
+    if (!V) { V = createViewer($("c")); V.onPick = (id, x, y) => { if (placing) return; const mk = $("modelview").value === "markers" ? markerAt(x, y) : -1; if (mk >= 0) return pickMarker(mk); const t = thingAt(x, y), p = !t && id >= 0 ? cur.areas.find(q => q.id === cur.item_area[id]) : null; if (t || p) { pick(t ? t.kind : "area", t ? t.item : p, false, t ? t.box : 0); } }; V.onGrab = grab; V.onDrag = dragTo; V.onDrop = release; V.onCamera = overlay; V.onFly = on => { $("cross").style.display = on ? "block" : "none"; if (on && document.activeElement) document.activeElement.blur(); }; }
+    cur = data; sel = null; alone = null; shown.clear(); regions.clear(); patched = ""; cur.left_out = new Set(); cur.vertex_room = null; cur.changes = [];
+    cur.cuts = {}; cur.neighbours = []; cur.item_room = cur.item_area.map(() => 0); cur.base_area = cur.item_area.slice();
+    fetch("changes/" + keyOf(data)).then(r => r.ok ? r.json() : []).then(list => { if (cur !== data) return; cur.changes = list.map(c => ({ ...c, lo: toLocal(c.lo), hi: toLocal(c.hi) })); overlay(); }).catch(() => {});
+    V.setGeometry(decodeBase64(data.b64), data.layout, data.lo, data.hi);
+    cur.base_items = V.geometry().item.slice();
+    useClaims([]);
+    setPlacing(null);
+    V.setSheet(null, []);
+    V.setModels(null); V.solo = null;
+    if (data.sheet) { const img = new Image(); img.style.display = "none"; img.onload = () => { if (cur === data) { cur.sheetImg = img; V.setSheet(img, data.tex); } img.remove(); }; img.src = data.sheet; document.body.appendChild(img); }
+    $("modelrow").style.display = data.props.length ? "" : "none";
+    if (data.props.length) modelView();
+    $("msg").textContent = ""; $("mapname").textContent = `${data.name} (${data.game})`;
+    V.flyKeys = KEYS; showAround(); controls(); moved(); overlay(); refresh(); V.render();
+    const takePending = () => { if (pendingPick) { const { kind, at } = pendingPick; pendingPick = null; const it = items(kind).find(x => x.at.join() === at.join()); if (it) pick(kind, it, true); } };
+    again = null; againPicked = -1; document.querySelector('.tab[data-kind="again"]').style.display = "none";
+    cur.signs = [];
+    doorsThatOpen();
+    fetch("signs/" + keyOf(data)).then(r => r.ok ? r.json() : []).then(list => { if (cur !== data) return; cur.signs = list.map(signItem); overlay(); refresh(); }).catch(() => {});
+    mapNames();
+    if (!otherMaps.length) fetch("elsewhere").then(r => r.ok ? r.json() : []).then(list => { otherMaps = list; mapNames(); }).catch(() => {});
+    cur.placeNames = { known: [], named: [], parents: {} };
+    fetch("places/" + keyOf(data)).then(r => r.ok ? r.json() : null).then(p => { if (cur !== data || !p) return; cur.placeNames = p; $("placelist").innerHTML = p.known.map(x => `<option value="${x}">`).join(""); }).catch(() => {});
+    fetch("evaluate/" + keyOf(data)).then(r => r.json()).then(r => showAgain(keyOf(data), r)).catch(() => {});
+    $("held").style.display = "none";
+    fetch("version/" + keyOf(data)).then(r => r.ok ? r.json() : null).then(v => { if (cur === data && v) showHeld(data, v); }).catch(() => {});
+    fetch("neighbours/" + keyOf(data)).then(r => r.ok ? r.json() : []).then(list => { if (cur !== data) return; cur.neighbours = list; colours(); showAround(); moved(); refresh(); }).catch(() => {});
+    status(); fetch("claims/" + keyOf(data)).then(r => r.json()).then(lines => { if (cur !== data) return; changed(lines); takePending(); if (of("connector").length) syncCuts(); });
+  } catch (e) { $("msg").textContent = "Could not show the map: " + e.message; }
+};
+function load(key) {  // a map (game/map)
+  for (const el of document.querySelectorAll(".map")) el.classList.toggle("sel", el.dataset.key === key);
+  $("msg").textContent = "Loading " + key + "... (the first time, it is built from the game: up to a minute for a big map)";
+  fetchMap(key);
+}
+const titleOf = m => ([...META.maps, ...otherMaps].find(x => keyOf(x) === keyOf(m)) || {}).game || m.source;  // a map's game, as the register names it
+const SORTS = { play: "Play order", name: "Name", connectors: "Connectors", fake_doors: "Fake doors", fake_outs: "Fake outs" };
+const gameOrder = [...new Set(META.maps.map(m => m.game))];
+function listRow(m, right) {
+  const el = document.createElement("div");
+  el.className = "map"; el.dataset.key = keyOf(m);
+  el.innerHTML = `<span class="name">${m.name}</span><span class="n">${esc(right)}</span>`;
+  el.onclick = () => load(keyOf(m));
+  $("list").appendChild(el);
+}
+function buildList() {
+  const by = localStorage.getItem("sort") || "play";
+  $("list").innerHTML = `<select id="sort">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${k === by ? " selected" : ""}>${v}</option>`).join("")}</select>`;
+  $("sort").onchange = e => { localStorage.setItem("sort", e.target.value); buildList(); };
+  const count = m => `${m.connectors} ${PLACES[1][1]}  ${m.fake_doors} ${PLACES[0][1]}  ${m.fake_outs} ${PLACES[2][1]}`, grouped = by === "play" || by === "name";
+  const key = { play: m => META.play[keyOf(m)] ?? 1e6, name: () => 0, connectors: m => -m.connectors, fake_doors: m => -m.fake_doors, fake_outs: m => -m.fake_outs }[by];
+  const ordered = [...META.maps].sort((a, b) => (grouped ? gameOrder.indexOf(a.game) - gameOrder.indexOf(b.game) : 0) || key(a) - key(b) || a.name.localeCompare(b.name));
+  let game = null;
+  for (const m of ordered) {
+    if (grouped && m.game !== game) { game = m.game; const h = document.createElement("h2"); h.textContent = game; $("list").appendChild(h); }
+    listRow(m, count(m));
+  }
+  if (cur) for (const el of document.querySelectorAll(".map")) el.classList.toggle("sel", el.dataset.key === keyOf(cur));
+}
+function mapsAround() {  // the maps (game/map) this one's level changes lead to: before it and after it, by play order
+  const steps = cur.neighbours.filter(x => x.kind !== "same").map(nbKey), here = META.play[keyOf(cur)] ?? 0, at = k => META.play[k] ?? 0;
+  return [steps.filter(k => at(k) < here), steps.filter(k => at(k) >= here)];
+}
+function showAround() {
+  const [before, after] = cur ? mapsAround() : [[], []], chip = (k, text) => `<span class="chip" data-go="${k}">${text}</span>`, name = k => k.split("/")[1];
+  $("prevmaps").innerHTML = before.map(k => chip(k, "\u25C0 " + name(k))).join(" ");
+  $("nextmaps").innerHTML = after.map(k => chip(k, name(k) + " \u25B6")).join(" ");
+  document.querySelectorAll("[data-go]").forEach(el => { el.onclick = () => load(el.dataset.go); });
+}
+function showKeys() {
+  $("binds").innerHTML = Object.entries(KEY_NAMES).map(([a, name]) => `<tr><td>${name}</td><td><button data-bind="${a}">${capturing === a ? "press a key" : esc(KEYS[a] === " " ? "space" : KEYS[a] || "no key")}</button></td></tr>`).join("");
+  document.querySelectorAll("[data-bind]").forEach(el => { el.onclick = () => { capturing = el.dataset.bind; showKeys(); }; });
+  if (V) V.flyKeys = KEYS;
+  document.querySelectorAll(".slot .key").forEach((el, i) => { el.textContent = KEYS["place" + (i + 1)]; });
+  $("fly").textContent = `Fly (${KEYS.fly.toUpperCase()})`;
+}
+$("slots").innerHTML = PLACES.map(([mode, sym, name]) => `<span class="slot" data-mode="${mode}" title="Place: ${name}"><span class="sym">${sym}</span>${name}<span class="key"></span></span>`).join("");
+$("slots").style.display = "inline-flex"; $("slots").style.gap = "4px";
+document.querySelectorAll(".slot").forEach(el => { el.onclick = () => setPlacing(placing === el.dataset.mode ? null : el.dataset.mode); });
+$("sameadd").onclick = () => { if (cur) sameStart(); };
+$("addplacebtn").onclick = () => { if (cur) addPlace(); };
+$("addplace").onkeydown = e => { if (e.key === "Enter" && cur) addPlace(); };
+$("tabs").innerHTML = TABS.map(([k, v]) => `<span class="tab" data-kind="${k}">${v}<span class="n" id="n-${k}"></span></span>`).join("");
+document.querySelectorAll(".tab").forEach(el => { el.onclick = () => showTab(el.dataset.kind); });
+showTab("connector");
+document.querySelector('.tab[data-kind="again"]').style.display = "none";
+$("opensettings").onclick = () => { $("settings").style.display = $("settings").style.display === "block" ? "none" : "block"; };
+$("closesettings").onclick = () => { $("settings").style.display = "none"; };
+$("resetkeys").onclick = () => { KEYS = { ...DEFAULT_KEYS }; localStorage.removeItem("keys"); capturing = null; showKeys(); };
+$("legend").innerHTML = Object.entries(META.area_kinds).map(([k, v]) => `<div><span class="sw" style="background:${v.colour}"></span>${v.label}${v.dropped ? " (not the facility)" : ""}</div>`).join("");
+$("dlegend").innerHTML = Object.values(BEHIND).map(([l, c]) => `<div><span class="sw" style="background:${c}"></span>${l}</div>`).join("");
+for (const id of ["route", "dropped", "ceilings", "fronts", "surf"]) $(id).addEventListener("input", controls);
+$("modelfind").addEventListener("input", listRows);
+$("opening").addEventListener("input", doorsThatOpen);
+for (const id of ["tiny", "smallh"]) $(id).addEventListener("input", refresh);
+$("allparts").addEventListener("input", everyMap);
+for (const id of ["connectors", "doors", "fake_outs", "parts", "signs", "tracks", "changes"]) $(id).addEventListener("input", overlay);
+$("modelview").value = localStorage.getItem("models") || "none";
+$("modelview").addEventListener("input", () => { if (cur) modelView(); });
+$("reset").onclick = () => { if (V) { V.resetCam(); V.draw(); } };
+const fly = () => { if (V && cur) V.setFly(!V.flying, FLY_SPEED / cur.quant); };
+$("fly").onclick = fly;
+$("commit").onclick = () => send("POST", "commit").then(status);
+$("discard").onclick = () => { if (confirm(`Throw away your changes to ${[cur.name, ...(META.levels[keyOf(cur)] || []).map(x => x.map).filter(m => changedMaps.includes(cur.source + "/" + m))].join(", ")}?`)) send("POST", "discard/" + keyOf(cur)).then(lines => { if (lines) { changed(lines); status(); if (of("connector").length) syncCuts(); } }); };
+$("push").onclick = () => send("POST", "push").then(status);
+$("signin").onclick = signIn;
+$("signout").onclick = () => send("POST", "logout", {}).then(status);
+$("again").onclick = evaluateAgain;
+$("keep").onclick = keepTicked;
+$("closeagain").onclick = () => { const name = keyOf(cur); send("DELETE", "evaluate/" + name).then(r => { if (r) showAgain(name, r); }); };
+addEventListener("change", e => { if (e.target.tagName === "SELECT") e.target.blur(); });
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (capturing) {
+    e.preventDefault();
+    if (e.key !== "Escape") {  // a key does one thing: whatever had it loses it
+      const key = e.key === "Backspace" ? "" : k;
+      KEYS = { ...Object.fromEntries(Object.entries(KEYS).map(([a, x]) => [a, key && x === key ? "" : x])), [capturing]: key };
+      localStorage.setItem("keys", JSON.stringify(KEYS));
+    }
+    capturing = null;
+    return showKeys();
+  }
+  if (e.key === "Escape") {
+    if ($("settings").style.display === "block") { $("settings").style.display = "none"; return; }
+    if (V && V.flying) return V.setFly(false);
+    return setPlacing(null);
+  }
+  const action = Object.keys(KEYS).find(a => KEYS[a] === k && !FLYING.has(a));
+  if (!action || !cur) return;
+  if (action === "fly") return fly();
+  if (action.startsWith("place")) { const mode = PLACES[+action.slice(5) - 1][0]; return setPlacing(placing === mode ? null : mode); }
+  if (action === "next" || action === "prev") { const [before, after] = mapsAround(), go = (action === "next" ? after : before)[0]; if (go) load(go); return; }
+  if (action.startsWith("t_")) { const box = $(action.slice(2)); box.checked = !box.checked; box.dispatchEvent(new Event("input")); return; }
+  if (action === "models") { if (cur.props.length) { const how = ["none", "markers", "real"], m = $("modelview"); m.value = how[(how.indexOf(m.value) + 1) % 3]; modelView(); } return; }
+  if (action === "del") { if ($("del")) $("del").click(); return; }
+  if (V.flying || !sel || sel.kind !== "connector") return;
+  if (action === "inside") standInside(sel.item);
+  if (action === "outside") seeOutside(sel.item);
+});
+buildList();
+showKeys();
+status();
+</script>
+</body>
+</html>

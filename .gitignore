@@ -1,0 +1,13 @@
+/*
+!/.gitignore
+!/LICENSE
+!/.dockerignore
+!/.github/
+/.github/*
+!/.github/workflows/
+!/Dockerfile
+!/pyproject.toml
+!/sources.json
+!/sources.lock.json
+!/bmab/
+__pycache__/

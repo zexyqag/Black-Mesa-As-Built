@@ -1,0 +1,239 @@
+{
+ "sources": {
+  "half-life": {
+   "from": {"steam_app": 70, "path": "valve"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad", "sound/*/*.wav", "models/*.mdl"]
+  },
+  "opposing-force": {
+   "base": "half-life",
+   "from": {"steam_app": 50, "path": "gearbox"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad", "sound/*/*.wav", "models/*.mdl"]
+  },
+  "blue-shift": {
+   "base": "half-life",
+   "from": {"steam_app": 130, "path": "bshift"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad", "sound/*/*.wav", "models/*.mdl"]
+  },
+  "decay": {
+   "base": "half-life",
+   "from": {"steam_app": 70, "path": "half-lifedecay"},
+   "get": "run decay_eng.exe from https://www.moddb.com/mods/half-life-decay into the Half-Life folder",
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "azure-sheep": {
+   "base": "half-life",
+   "from": {"steam_app": 70, "path": "asheep"},
+   "get": "run asheep.exe, then asheepsteam.exe, from https://www.moddb.com/mods/azure-sheep into the Half-Life folder",
+   "expand": ["pak0.pak"],
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "hl-extended": {
+   "base": "half-life",
+   "from": {"steam_app": 70, "path": "hl_extended"},
+   "get": "install it from https://www.moddb.com/mods/half-life-extended into the Half-Life folder",
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "ps2-half-life": {
+   "from": {"download": "Half-Life (Europe Australia).zip", "page": "your own PlayStation 2 disc, dumped to a .bin/.cue image and zipped", "root": "valve/"},
+   "expand": ["*.bin", "valve/pak0.pak"],
+   "include": ["maps/*.bs2", "maps/graphs/*.nod", "titles.txt", "sound/sentences.txt", "skill.cfg", "sound/scientist/tr_*.wav", "sound/holo/*.wav"]
+  },
+  "ps2-decay": {
+   "from": {"download": "Half-Life (Europe Australia).zip", "page": "your own PlayStation 2 disc, dumped to a .bin/.cue image and zipped", "root": "decay/"},
+   "expand": ["*.bin", "decay/pak0.pak"],
+   "include": ["maps/*.bs2", "maps/graphs/*.nod", "titles.txt", "sound/sentences.txt", "sound/*/*.wav"]
+  },
+  "echoes": {
+   "base": "half-life",
+   "from": {"download": "Echoes_v1.4.zip", "page": "https://www.moddb.com/mods/half-life-echoes", "path": "echoes/"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "echoes-rmf": {
+   "from": {"download": "Echoes_Source_v1.4.zip", "page": "https://www.moddb.com/mods/half-life-echoes", "path": "rmfs/"},
+   "include": ["*.rmf"]
+  },
+  "field-intensity": {
+   "base": "half-life",
+   "from": {"download": "field_intensity-1.7.6.zip", "page": "https://www.moddb.com/mods/field-intensity", "path": "field_intensity/"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "uplinked": {
+   "base": "half-life",
+   "from": {"download": "uplinked_v1.1.zip", "page": "https://www.moddb.com/mods/uplinked", "path": "uplinked/"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "uplinked-rmf": {
+   "from": {"download": "uplinked_rmfs.zip", "page": "https://www.moddb.com/mods/uplinked", "path": "rmfs/"},
+   "include": ["*.rmf", "*.map"]
+  },
+  "induction": {
+   "base": "half-life",
+   "from": {"download": "induction-1.4.zip", "page": "https://www.moddb.com/mods/half-life-induction", "path": "induction/"},
+   "include": ["liblist.gam", "maps/*.bsp", "sound/sentences.txt", "titles.txt", "*.wad"]
+  },
+  "black-mesa": {
+   "from": {"steam_app": 362890, "path": "bms"},
+   "expand": ["bms_maps_dir.vpk", "bms_materials_dir.vpk", "bms_textures_dir.vpk", "bms_misc_dir.vpk", "bms_models_dir.vpk"],
+   "include": ["gameinfo.txt", "maps/*.bsp", "materials/*.vmt", "materials/*.vtf", "models/*.mdl", "models/*.vvd", "models/*.dx90.vtx", "resource/closecaption_english.txt", "scripts/*.txt", "scenes/*.vcd"]
+  },
+  "black-mesa-mapsrc": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2331428357]},
+   "include": ["*.vmf"]
+  },
+  "bm-blue-shift": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2424633574], "path": "bshift"},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "materials/*.vmt", "materials/*.vtf", "models/*.mdl", "models/*.vvd", "models/*.dx90.vtx"]
+  },
+  "bm-hazard-course": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2329457048]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-on-a-rail-uncut": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 608116737]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-definitive-on-a-rail": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 1425916593]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-pd-anomalous-materials": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 1575681040]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-pd-office-complex": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 486741871]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-pd-questionable-ethics": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 673412384]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-uncharted-territory": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 1205460043]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-military": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 1720191293], "path": "bmmilitary"},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "materials/*.vmt", "materials/*.vtf", "models/*.mdl", "models/*.vvd", "models/*.dx90.vtx"]
+  },
+  "bm-classic": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2378420148]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp"]
+  },
+  "bm-azure-sheep-extended": {
+   "base": "black-mesa",
+   "from": {"download": "azure-sheep-extended", "page": "https://steamcommunity.com/sharedfiles/filedetails/?id=2288016896", "path": "ASP1Ex+patch1/asheep"},
+   "get": "subscribe to the Workshop item and extract ASP1Ex+patch1/asheep/maps/*.bsp from its ASP1Ex+patch1.7z into downloads/azure-sheep-extended/",
+   "include": ["maps/*.bsp"]
+  },
+  "bm-azure-sheep-reborn": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 3615546888], "path": "asheep_reborn"},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp"]
+  },
+  "bm-we-are-not-alone": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 3015012817]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-crush-depth": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2909291145]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-vicarious-reality": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2976417497]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-worlds-collide": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2486231661]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-further-data": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2316239201]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-surface-call": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2815616816]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-on-a-rail-2": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 3721638592]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-freight-yard": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 2903593678]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-pd-lambda-core": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 483411731]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-hard-course": {
+   "base": "black-mesa",
+   "from": {"download": "hard-course-demo", "page": "https://steamcommunity.com/sharedfiles/filedetails/?id=2966730894", "path": "Black Mesa Hard Course/bmhc"},
+   "get": "subscribe to the Workshop item and extract the .bsp files of its .rar, with their folders, into downloads/hard-course-demo/",
+   "include": ["maps/*.bsp"]
+  },
+  "bm-revamped-hostiles": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 3730255595]},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "bm-hecu": {
+   "base": "black-mesa",
+   "from": {"workshop": [362890, 3372585826], "path": "bmhecu"},
+   "expand": ["*.vpk"],
+   "include": ["maps/*.bsp", "*.vmf"]
+  },
+  "gmod-rp-black-mesa-remake": {
+   "from": {"workshop": [4000, 2689622468]},
+   "expand": ["*.gma"],
+   "include": ["maps/*.bsp"]
+  },
+  "gmod-infmap-bmrf": {
+   "from": {"workshop": [4000, 3313029546]},
+   "expand": ["*.gma"],
+   "include": ["maps/*.bsp"]
+  }
+ }
+}
