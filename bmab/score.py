@@ -100,6 +100,25 @@ def compare(name, b, found, key):
     return out
 
 
+def places_against(rev):
+    """How the place guess (bmab.places.named_in_map: the place a map's own evidence names most) does against the place claims of
+    the maps at the redlines' commit rev: {game/map: {claimed, guess, verdict}}. verdict: right, inside (a place within a claimed
+    one), around (a place holding one), wrong, or none (nothing seen or heard in the map names a place)."""
+    from . import places
+    reg = redlines.register()
+    tree = places.build(reg, {})
+    called, out = places.names(tree), {}
+    for game, name in redlines.maps_at(rev):
+        claimed = {called.get(r["place"], r["place"]) for r in redlines.committed(f"maps/{game}/{name}.jsonl", rev) if r["kind"] == "place"}
+        if not claimed:
+            continue
+        guess = next(iter(places.named_in_map(reg, tree, game, name)), None)
+        verdict = ("none" if guess is None else "right" if guess in claimed else "inside" if claimed & places.ancestors(tree, guess)
+                   else "around" if any(guess in places.ancestors(tree, c) for c in claimed if c in tree) else "wrong")
+        out[f"{game}/{name}"] = {"claimed": sorted(claimed), "guess": guess, "verdict": verdict}
+    return out
+
+
 def table(results):
     """The scores as lines of text: per map and over all of them."""
     lines, total = [], {kind: Counter() for kind in SCORED}

@@ -171,6 +171,12 @@ def claims(game, name):
     return _rows(_path(game, name))
 
 
+def maps_at(rev="HEAD"):
+    """The (game, map)s the redlines' commit rev holds claims about."""
+    listed = _git("ls-tree", "-r", "--name-only", "-z", rev, "--", "maps/").stdout.split("\0")
+    return sorted((p.split("/")[1], p.split("/")[2][:-6]) for p in listed if p.count("/") == 2 and p.endswith(".jsonl"))
+
+
 def every_map():
     """{(game, map): its claims} of every map the redlines hold."""
     return {(p.parent.name, p.stem): claims(p.parent.name, p.stem) for p in sorted((REDLINES / "maps").glob("*/*.jsonl"))}

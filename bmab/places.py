@@ -4,9 +4,9 @@ series' missing members) under the parent their siblings share, and the maps tha
 the evidence behind every fact that names it or says what holds it, so a view of the hierarchy loses nothing.
 """
 import html
-from collections import defaultdict
+from collections import Counter, defaultdict
 
-from .register import PLACE_TYPES
+from .register import MAPPABLE, PLACE_TYPES
 
 TIER_NAMES = {1: "Half-Life", 2: "expansions", 3: "Black Mesa", 4: "mods", 5: "reasoning"}
 
@@ -81,6 +81,35 @@ def build(register, locations):
         for q in n["parents"]:
             node[q]["children"].add(p)
     return dict(node)
+
+
+def names(tree):
+    """{name: the place of the tree it names} for every place and every other name of one."""
+    return {**{a: p for p, n in tree.items() for a in n["aliases"]}, **{p: p for p in tree}}
+
+
+def ancestors(tree, place):
+    """Every place holding a place of the tree, however far up."""
+    seen, todo = set(), [place]
+    while todo:
+        for q in tree[todo.pop()]["parents"]:
+            if q not in seen:
+                seen.add(q)
+                todo.append(q)
+    return seen
+
+
+def named_in_map(register, tree, game, name):
+    """The places a map's own evidence names (signs seen and lines heard in it), of the kinds a map can be in (MAPPABLE), the most
+    named first: the guess at where the map is. register: bmab.redlines.register; tree: build."""
+    here = {e["id"] for e in register["evidence"].values() if e["source"] == game and name in e.get("seen_in", []) + e.get("heard_in", [])}
+    called, named = names(tree), Counter()
+    for f in register["facts"]:
+        if here.intersection(f["evidence"]):
+            for p in dict.fromkeys(called[q] for q in (f["subject"], f.get("object")) if q in called):
+                if tree[p]["type"] in MAPPABLE:
+                    named[p] += 1
+    return sorted(named, key=lambda p: -named[p])
 
 
 def render(tree):

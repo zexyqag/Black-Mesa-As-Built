@@ -12,6 +12,8 @@
   python -m bmab routed SOURCE BASE.json REPORT OUT.html --add SOURCE...
   python -m bmab recipe OUT [--quick]
   python -m bmab evaluate REPORT --sources SOURCE... [--maps REGEX] [--redo]
+  python -m bmab score REPORT --sources SOURCE... --maps REGEX [--against REV]
+  python -m bmab score-places [--against REV]
   python -m bmab shared SOURCE OUT [--with SOURCE] [--maps REGEX] [--with-maps REGEX] [--min-m2 M2]
   python -m bmab match IMAGE SOURCE OUT [--maps REGEX] [--graph JSON [--group]]
   python -m bmab transcribe SOURCE OUT [--include GLOB ...] [--model NAME]
@@ -26,6 +28,7 @@ import hashlib
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -653,6 +656,16 @@ def cmd_score(args):
     return 0
 
 
+def cmd_score_places(args):
+    from . import score
+    results = score.places_against(args.against)
+    for key, r in results.items():
+        print(f"{key:32} {r['verdict']:7} guessed {r['guess'] or '-'}, claimed {', '.join(r['claimed'])}")
+    counts = Counter(r["verdict"] for r in results.values())
+    print(f"{len(results)} maps with a place claim: " + ", ".join(f"{v} {counts[v]}" for v in ("right", "inside", "around", "wrong", "none")))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(prog="bmab")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -780,6 +793,9 @@ def main():
     sc.add_argument("--fake-outs", help="a file of fake outs already found for these maps, written by the first run (default: search them now)")
     sc.add_argument("--jobs", type=int, default=4, help="worker processes for the fake out search (default 4)")
     sc.set_defaults(fn=cmd_score)
+    sp = sub.add_parser("score-places", help="how well the place guess (what a map's own signs and lines name most) does against the maps' place claims")
+    sp.add_argument("--against", default="HEAD", help="the redlines' commit holding the place claims (default HEAD)")
+    sp.set_defaults(fn=cmd_score_places)
     ap_ = sub.add_parser("app", help="the app at its front page, in a window of its own on Windows, else in the browser (bmab.app)")
     ap_.add_argument("--port", type=int, default=8650)
     ap_.set_defaults(fn=cmd_app)

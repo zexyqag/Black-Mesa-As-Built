@@ -358,15 +358,8 @@ def known_places(game, name):
     from . import places
     reg = redlines.register()
     tree = places.build(reg, {})
-    here = {e["id"] for e in reg["evidence"].values() if e["source"] == game and name in e.get("seen_in", []) + e.get("heard_in", [])}
-    named = {}
-    for f in reg["facts"]:
-        if here.intersection(f["evidence"]):
-            for p in (f["subject"], f.get("object")):
-                if p in tree and tree[p]["type"] in register.MAPPABLE:
-                    named[p] = named.get(p, 0) + 1
     claimed = {r["place"] for rows in redlines.every_map().values() for r in rows if r["kind"] == "place"}
-    return {"known": sorted({p for p, n in tree.items() if n["type"] in register.MAPPABLE} | claimed), "named": sorted(named, key=lambda p: -named[p]),
+    return {"known": sorted({p for p, n in tree.items() if n["type"] in register.MAPPABLE} | claimed), "named": places.named_in_map(reg, tree, game, name),
             "parents": {p: sorted(n["parents"]) for p, n in tree.items() if n["parents"]}}
 
 
