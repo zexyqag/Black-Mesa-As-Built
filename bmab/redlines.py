@@ -207,10 +207,10 @@ def write_map(game, name, rows):
 
 
 def place_table():
-    """Where the maps are, as the layout reads it, from the claims: {here: [{place, game, maps}], adjacent, same_place: [{maps,
-    align: {to, translation, how}}]}. A place claim puts its map in its place; a same place claim aligns its map with the other
-    (translation: this map's coordinates less the other's, as bmab.shared's peaks have it). Which maps lie next to which places
-    will come from the direction signs' arrows (the facts register), and adjacent is empty until then."""
+    """Where the maps are, as the layout reads it: {here: [{place, game, maps}], adjacent: [{from: game:map, to: place}],
+    same_place: [{maps, align: {to, translation, how}}]}. A place claim puts its map in its place; a same place claim aligns its map
+    with the other (translation: this map's coordinates less the other's, as bmab.shared's peaks have it). A map lies next to each
+    place a direction sign seen in it points to (the register's points facts and the evidence they rest on)."""
     here, same = {}, []
     for (game, name), rows in every_map().items():
         for r in rows:
@@ -219,7 +219,11 @@ def place_table():
             if r["kind"] == "same_place":
                 same.append({"maps": [f"{game}:{name}"], "align": {"to": f"{r['game']}:{r['map']}", "translation": [a - b for a, b in zip(r["at"], r["there"])],
                                                                   "how": "marked by hand" + (", another version" if r.get("changed") else "")}})
-    return {"here": [{"place": p, "game": g, "maps": sorted(ms)} for (p, g), ms in sorted(here.items())], "adjacent": [], "same_place": same}
+    shown = {e["id"]: e for e in evidence()}
+    adjacent = {(f"{shown[i]['source']}:{m}", f["subject"]) for f in table("facts") if f["relation"] == "points" for i in f["evidence"] if i in shown
+                for m in shown[i].get("seen_in", [])}
+    return {"here": [{"place": p, "game": g, "maps": sorted(ms)} for (p, g), ms in sorted(here.items())],
+            "adjacent": [{"from": m, "to": p} for m, p in sorted(adjacent)], "same_place": same}
 
 
 def decided_links(game):
