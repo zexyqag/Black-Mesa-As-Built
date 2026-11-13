@@ -5,6 +5,7 @@
 !/.github/
 /.github/*
 !/.github/workflows/
+!/.github/release.py
 !/pyproject.toml
 !/sources.json
 !/sources.lock.json

@@ -1,6 +1,6 @@
 """What the downloads run (built with PyInstaller by .github/workflows/release.yml): bmab, by default bmab app, keeping its things
 in the app's folder (data, downloads, cache, git, the redlines), with the settings the release was built with (settings.json in
-the bundle: the redlines' address, the GitHub sign-in's client ID) where the environment doesn't say otherwise. Without a console
+the bundle: the redlines' address, the GitHub sign-in's client ID, its version) where the environment doesn't say otherwise. Without a console
 (the Windows download) what bmab says goes to bmab.log in the app's folder."""
 import json
 import multiprocessing

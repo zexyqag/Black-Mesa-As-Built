@@ -1,6 +1,6 @@
 [project]
 name = "bmab"
-version = "0.1.0"
+dynamic = ["version"]  # the release's tag (.github/release.py)
 description = "Reads Half-Life maps into one connected, placed model of the facility"
 requires-python = ">=3.11"
 license = "AGPL-3.0-or-later"
