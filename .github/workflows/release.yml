@@ -36,7 +36,8 @@ jobs:
         env:
           BMAB_REDLINES_REPO: ${{ vars.BMAB_REDLINES_REPO }}
           BMAB_GITHUB_CLIENT_ID: ${{ vars.BMAB_GITHUB_CLIENT_ID }}
-        run: python -c "import json, os; json.dump({k: os.environ[k] for k in ('BMAB_REDLINES_REPO', 'BMAB_GITHUB_CLIENT_ID') if os.environ[k]}, open('settings.json', 'w'))"
+        run: |
+          python -c "import json, os; json.dump({k: os.environ[k] for k in ('BMAB_REDLINES_REPO', 'BMAB_GITHUB_CLIENT_ID') if os.environ[k]}, open('settings.json', 'w'))"
       - name: Build
         # bmab's source goes in as well: it tells its versions apart (the views' cache) by its own files
         run: >
