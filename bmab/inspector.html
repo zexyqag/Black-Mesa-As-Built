@@ -100,15 +100,15 @@
     <details><summary class="small">What the colours mean</summary><div class="small" id="legend"></div></details>
   </details>
   <div id="tabs"></div>
-  <div class="page" data-kind="connector"><div class="rows" id="rows-connector"></div></div>
-  <div class="page" data-kind="join"><div class="small">Tick one to see it placed against this map. Green cubes: both fill that space and agree. Red: they disagree.</div><div class="rows" id="rows-join"></div>
+  <div class="page" data-kind="connector"><label class="small reviewed" title="Tick once every one on this map is claimed: what you say about them then counts as the whole answer for this map"><input type="checkbox" class="rev" data-kinds="connector"> All of these on this map are claimed</label><div class="rows" id="rows-connector"></div></div>
+  <div class="page" data-kind="join"><label class="small reviewed" title="Tick once every one on this map is claimed: what you say about them then counts as the whole answer for this map"><input type="checkbox" class="rev" data-kinds="level_change same_place"> All of these on this map are claimed</label><div class="small">Tick one to see it placed against this map. Green cubes: both fill that space and agree. Red: they disagree.</div><div class="rows" id="rows-join"></div>
     <div class="small" style="margin-top:8px"><b>Same place</b> as a spot in another map, of this game or another (another edition's too): look at the spot here, then <input id="samemap" list="mapnames" placeholder="game/map" size="16"> <button id="sameadd">Line it up</button></div><div class="rows" id="rows-same_place"></div><datalist id="mapnames"></datalist></div>
-  <div class="page" data-kind="door"><div class="small" id="dlegend"></div><div class="rows" id="rows-door"></div></div>
-  <div class="page" data-kind="fake_out"><label class="small"><input type="checkbox" id="smallh"> Small ones too</label><div class="rows" id="rows-fake_out"></div></div>
-  <div class="page" data-kind="area"><label class="small"><input type="checkbox" id="tiny"> Tiny ones too</label><div class="rows" id="rows-area"></div></div>
+  <div class="page" data-kind="door"><label class="small reviewed" title="Tick once every one on this map is claimed: what you say about them then counts as the whole answer for this map"><input type="checkbox" class="rev" data-kinds="fake_door ought_door"> All of these on this map are claimed</label><div class="small" id="dlegend"></div><div class="rows" id="rows-door"></div></div>
+  <div class="page" data-kind="fake_out"><label class="small reviewed" title="Tick once every one on this map is claimed: what you say about them then counts as the whole answer for this map"><input type="checkbox" class="rev" data-kinds="fake_out"> All of these on this map are claimed</label><br><label class="small"><input type="checkbox" id="smallh"> Small ones too</label><div class="rows" id="rows-fake_out"></div></div>
+  <div class="page" data-kind="area"><label class="small reviewed" title="Tick once every one on this map is claimed: what you say about them then counts as the whole answer for this map"><input type="checkbox" class="rev" data-kinds="area"> All of these on this map are claimed</label><br><label class="small"><input type="checkbox" id="tiny"> Tiny ones too</label><div class="rows" id="rows-area"></div></div>
   <div class="page" data-kind="sign"><div class="rows" id="rows-sign"></div></div>
   <div class="page" data-kind="model"><input id="modelfind" placeholder="Find by name" style="width:95%"><div class="rows" id="rows-model"></div></div>
-  <div class="page" data-kind="part"><div class="small"><label><input type="checkbox" id="allparts"> Every map</label></div><div class="rows" id="rows-part"></div></div>
+  <div class="page" data-kind="part"><label class="small reviewed" title="Tick once every one on this map is claimed: what you say about them then counts as the whole answer for this map"><input type="checkbox" class="rev" data-kinds="part opening"> All of these on this map are claimed</label><div class="small"><label><input type="checkbox" id="allparts"> Every map</label></div><div class="rows" id="rows-part"></div></div>
   <div class="page" data-kind="place"><div class="small">Which place of the facility the map is in: the most specific one known (what holds it comes from the facts register). Two only for a map that spans two. <a href="../placetree" target="_blank" style="color:#8cc8ff">Every place, as a tree</a></div><div class="rows" id="rows-place"></div>
     <div class="small"><input id="addplace" list="placelist" placeholder="a place" size="18"> <button id="addplacebtn">Add a place</button></div><datalist id="placelist"></datalist></div>
   <div class="page" data-kind="again"><div class="small" id="againmsg"></div><div class="rows" id="rows-again"></div>
@@ -175,6 +175,7 @@ const toLocal = p => p.map((v, i) => (v - cur.centre[i]) / cur.quant);
 const of = k => cur.lines.filter(l => l.kind === k);
 function useClaims(lines) {  // what the redlines say, as the items the page lists and draws
   cur.lines = lines;
+  reviewed();
   cur.doors = [...of("fake_door"), ...of("ought_door")].map(doorItem);
   cur.fakeOuts = of("fake_out").map(fakeOutItem);
   cur.connectors = of("connector").map(l => connectorItem(l));
@@ -462,6 +463,16 @@ function showTab(kind) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.kind === kind));
   document.querySelectorAll(".page").forEach(t => t.classList.toggle("on", t.dataset.kind === kind));
 }
+
+function reviewed() {  // the ticks: which kinds the map's review claim says a person has claimed every one of
+  const said = (cur && (cur.lines.find(l => l.kind === "review") || {}).kinds) || [];
+  document.querySelectorAll("input.rev").forEach(t => { t.checked = t.dataset.kinds.split(" ").every(k => said.includes(k)); t.disabled = !cur; });
+}
+document.querySelectorAll("input.rev").forEach(t => t.onchange = () => {
+  const was = cur.lines.find(l => l.kind === "review"), these = t.dataset.kinds.split(" ");
+  const kinds = [...new Set([...((was && was.kinds) || []).filter(k => !these.includes(k)), ...(t.checked ? these : [])])].sort();
+  if (kinds.length) store({ ...(was || {}), kind: "review", kinds }); else if (was) unstore(was);
+});
 
 // ---------- what a pick looks like ----------
 function pick(kind, item, focus, box = 0) {  // box: which of a part's boxes the handles work on
