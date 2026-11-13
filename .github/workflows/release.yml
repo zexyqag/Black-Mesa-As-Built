@@ -34,7 +34,7 @@ jobs:
         include:
           - os: windows-2025
             name: windows
-            options: --windowed --version-file version.txt
+            options: --windowed --version-file version.txt --icon bmab/icon.ico
             archive: bmab-windows.zip
           - os: ubuntu-22.04  # an older glibc, so the download runs on older systems too
             name: linux
@@ -68,7 +68,7 @@ jobs:
         run: >
           pyinstaller --noconfirm --onedir --name bmab ${{ matrix.options }}
           --add-data "sources.json:." --add-data "sources.lock.json:." --add-data "settings.json:."
-          --add-data "bmab/*.py:bmab" --add-data "bmab/*.html:bmab" --add-data "bmab/*.js:bmab"
+          --add-data "bmab/*.py:bmab" --add-data "bmab/*.html:bmab" --add-data "bmab/*.js:bmab" --add-data "bmab/icon.ico:bmab"
           bmab/frozen.py
       - name: Git for Windows (MinGit)
         if: matrix.name == 'windows'

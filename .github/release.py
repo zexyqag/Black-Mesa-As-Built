@@ -4,7 +4,7 @@
                                                  when nothing since the last release is released); a run by hand, 0.0.0-<branch>.g<sha>
   python .github/release.py notes VERSION        the release's notes: its commits' subjects since the release before
   python .github/release.py versioninfo VERSION  bmab.exe's version details, for PyInstaller's --version-file
-  python .github/release.py check ARCHIVE VERSION  the download, unpacked, starts, says its version and ends on Quit
+  python .github/release.py check ARCHIVE VERSION  the download, unpacked, starts, says its version, has its icon and ends on Quit
 
 Versions follow the commits' Conventional Commits prefixes: fix: and perf: release the next patch, feat: the next minor, a
 breaking change (feat!:, fix!:, or a BREAKING CHANGE: line) the next major; before 1.0, the next minor for a breaking change and
@@ -95,8 +95,8 @@ def _ask(port, method, path, body=None):
 
 
 def check(archive, version):
-    """Unpacked into a folder of its own, the download's bmab serve answers with the front page, says its version, and ends with
-    exit code 0 when the front page's Quit asks it to. Exits 1 if not."""
+    """Unpacked into a folder of its own, the download's bmab serve answers with the front page, says its version, serves the
+    pages' icon, and ends with exit code 0 when the front page's Quit asks it to. Exits 1 if not."""
     folder = Path(tempfile.mkdtemp())
     if archive.endswith(".zip"):
         zipfile.ZipFile(archive).extractall(folder)
@@ -117,9 +117,10 @@ def check(archive, version):
                     raise SystemExit(f"the download didn't answer (exit {proc.poll()})")
                 time.sleep(1)
         said = json.loads(_ask(8664, "GET", "/status")[1])
-        print(f"front page {status}, status {said}", flush=True)
-        if status != 200 or NAME.encode() not in page or said.get("version") != version:
-            raise SystemExit(f"expected the front page and version {version}")
+        icon = _ask(8664, "GET", "/favicon.ico")
+        print(f"front page {status}, status {said}, icon {icon[0]} ({len(icon[1])} bytes)", flush=True)
+        if status != 200 or NAME.encode() not in page or said.get("version") != version or icon[0] != 200 or not icon[1].startswith(b"\0\0\1\0"):
+            raise SystemExit(f"expected the front page, version {version} and the icon")
         print("Quit:", _ask(8664, "POST", "/quit", {}), flush=True)
         if proc.wait(timeout=30) != 0:
             raise SystemExit(f"it ended with exit code {proc.returncode}")

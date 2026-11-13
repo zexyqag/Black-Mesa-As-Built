@@ -237,6 +237,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, view._page("inspector.html", pages.meta(page)).encode(), "text/html; charset=utf-8")
         if p in ([], ["index.html"]) and not page:
             return self._send(200, view._page("front.html", None).encode(), "text/html; charset=utf-8")
+        if p == ["favicon.ico"] and not page:  # the pages' tab icon (bmab.exe's too), asked for by the browser
+            return self._send(200, (Path(__file__).parent / "icon.ico").read_bytes(), "image/x-icon")
         if p == ["games"] and not page:
             return self._get(games)
         if p == ["games", "copy"] and not page:
