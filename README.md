@@ -24,6 +24,9 @@ From the source instead: with Python 3.11 or later, install numpy, pillow and sc
 Your edits are saved on your computer as you make them. Commit and Push send them to the redlines, or, if you can't push
 there, as a pull request that bmab opens for you.
 
+What others have sent comes in when bmab starts and before each Push. Where someone else changed something you changed too,
+the map's page (or the register's) shows both, and you keep yours or take theirs before committing.
+
 Nothing from the games leaves your computer: bmab reads its own copy of them, and the redlines hold only what people say.
 
 ## Licence
