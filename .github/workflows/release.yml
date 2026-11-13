@@ -1,0 +1,76 @@
+# The downloads: bmab for Windows and Linux, built with PyInstaller (bmab/frozen.py) for each tag v* and published as its release;
+# run by hand, the same downloads as the run's artifacts. The redlines' address and the GitHub sign-in's client ID come from the
+# repository's variables BMAB_REDLINES_REPO and BMAB_GITHUB_CLIENT_ID.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-2025
+            name: windows
+            options: --windowed
+          - os: ubuntu-22.04  # an older glibc, so the download runs on older systems too
+            name: linux
+            options: ""
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Dependencies
+        run: |
+          python -m pip install pyinstaller
+          python -c "import subprocess, sys, tomllib; subprocess.run([sys.executable, '-m', 'pip', 'install', *tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']], check=True)"
+      - name: Settings
+        env:
+          BMAB_REDLINES_REPO: ${{ vars.BMAB_REDLINES_REPO }}
+          BMAB_GITHUB_CLIENT_ID: ${{ vars.BMAB_GITHUB_CLIENT_ID }}
+        run: python -c "import json, os; json.dump({k: os.environ[k] for k in ('BMAB_REDLINES_REPO', 'BMAB_GITHUB_CLIENT_ID') if os.environ[k]}, open('settings.json', 'w'))"
+      - name: Build
+        # bmab's source goes in as well: it tells its versions apart (the views' cache) by its own files
+        run: >
+          pyinstaller --noconfirm --onedir --name bmab ${{ matrix.options }}
+          --add-data "sources.json:." --add-data "sources.lock.json:." --add-data "settings.json:."
+          --add-data "bmab/*.py:bmab" --add-data "bmab/*.html:bmab" --add-data "bmab/*.js:bmab"
+          bmab/frozen.py
+      - name: Git for Windows (MinGit)
+        if: matrix.name == 'windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url=$(gh api repos/git-for-windows/git/releases/latest --jq '.assets[] | select(.name | test("^MinGit-[0-9.]+-64-bit\\.zip$")) | .browser_download_url')
+          echo "$url"
+          curl -sSfL -o mingit.zip "$url"
+          python -m zipfile -e mingit.zip dist/bmab/git
+      - name: Archive
+        run: |
+          cd dist
+          if [ "${{ matrix.name }}" = windows ]; then python -m zipfile -c ../bmab-windows.zip bmab; else tar -czf ../bmab-linux.tar.gz bmab; fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bmab-${{ matrix.name }}
+          path: bmab-${{ matrix.name }}.*
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" bmab-windows.zip bmab-linux.tar.gz --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
